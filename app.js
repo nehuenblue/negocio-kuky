@@ -4,12 +4,12 @@ import { catalogoData } from './catalogo.js';
 import L from 'https://esm.sh/leaflet@1.9.4';
 
 const firebaseConfig = {
-    apiKey: "TU_API_KEY",
-    authDomain: "pehuen-tv.firebaseapp.com",
-    projectId: "pehuen-tv",
-    storageBucket: "pehuen-tv.appspot.com",
-    messagingSenderId: "TU_ID",
-    appId: "TU_APP_ID"
+    apiKey: "AIzaSyBzhUo2XFlVTs_TeZrEI3IKiyvlWvLHaNM",
+    authDomain: "emanuel-natura.firebaseapp.com",
+    projectId: "emanuel-natura",
+    storageBucket: "emanuel-natura.firebasestorage.app",
+    messagingSenderId: "481732059058",
+    appId: "1:481732059058:web:72def09409841a952d0eab"
 };
 
 const app = initializeApp(firebaseConfig);
