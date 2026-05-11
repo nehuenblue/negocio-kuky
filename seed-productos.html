@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emanuel Cosméticos · Carga Inicial del Catálogo</title>
+  <link rel="icon" type="image/jpeg" href="../assets/logo.jpg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --crema:        #f8f1e9;
+      --crema-clara:  #fdf8f3;
+      --rose-palo:    #c89c8e;
+      --rose-profundo:#a8786b;
+      --terracota:    #8a5448;
+      --tinta:        #3a2a25;
+      --gris-suave:   #b8a89e;
+      --linea:        rgba(168, 120, 107, 0.18);
+      --error:        #b8413a;
+      --exito:        #5e7c5b;
+      --aviso:        #b88a3a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', system-ui, sans-serif;
+      background: var(--crema);
+      color: var(--tinta);
+      min-height: 100vh;
+      padding: 40px 24px;
+    }
+    .contenedor { max-width: 760px; margin: 0 auto; }
+
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 42px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+    }
+    p.subtit {
+      color: var(--terracota);
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      margin-bottom: 32px;
+    }
+
+    .tarjeta {
+      background: var(--crema-clara);
+      border-radius: 18px;
+      padding: 32px;
+      box-shadow: 0 8px 32px -16px rgba(168, 120, 107, 0.2);
+      border: 1px solid var(--linea);
+      margin-bottom: 24px;
+    }
+    .tarjeta h2 {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 500;
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: var(--tinta);
+    }
+    .tarjeta p { color: var(--terracota); font-size: 14px; line-height: 1.6; }
+    .tarjeta ul { margin: 12px 0 0 20px; color: var(--terracota); font-size: 14px; line-height: 1.8; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .stat {
+      background: #fff;
+      border: 1px solid var(--linea);
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+    }
+    .stat .num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--terracota);
+      line-height: 1;
+    }
+    .stat .lbl {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--gris-suave);
+      margin-top: 6px;
+    }
+
+    .barra-progreso {
+      background: var(--linea);
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+      margin: 16px 0 8px 0;
+    }
+    .barra-progreso > div {
+      background: linear-gradient(90deg, var(--rose-palo), var(--terracota));
+      height: 100%;
+      width: 0%;
+      transition: width .3s ease;
+    }
+    .progreso-texto {
+      font-size: 13px;
+      color: var(--terracota);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    button {
+      padding: 14px 24px;
+      border: none;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 13px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .2s;
+      font-weight: 500;
+    }
+    .btn-primario {
+      background: var(--tinta);
+      color: var(--crema-clara);
+      width: 100%;
+      padding: 18px;
+    }
+    .btn-primario:hover:not(:disabled) { background: var(--terracota); }
+    .btn-primario:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-link {
+      background: transparent;
+      color: var(--terracota);
+      border: 1px solid var(--linea);
+      padding: 10px 18px;
+      font-size: 12px;
+    }
+    .btn-link:hover { background: var(--linea); }
+
+    .alerta {
+      padding: 14px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 12px 0;
+    }
+    .alerta.info  { background: #f4ece3; color: var(--terracota); border: 1px solid var(--linea); }
+    .alerta.exito { background: #e6efe4; color: var(--exito); border: 1px solid rgba(94, 124, 91, 0.25); }
+    .alerta.error { background: #f9e7e5; color: var(--error); border: 1px solid rgba(184, 65, 58, 0.25); }
+    .alerta.aviso { background: #faefd9; color: var(--aviso); border: 1px solid rgba(184, 138, 58, 0.25); }
+
+    .log {
+      background: #1c1311;
+      color: #d8c4b8;
+      border-radius: 12px;
+      padding: 14px;
+      font-family: 'SF Mono', Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 16px;
+      display: none;
+    }
+    .log.visible { display: block; }
+    .log .ok    { color: #9fd09a; }
+    .log .err   { color: #ed8a85; }
+    .log .info  { color: #c89c8e; }
+
+    .acciones-pie {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    a { color: var(--terracota); }
+
+    .esperando {
+      text-align: center;
+      padding: 40px;
+      color: var(--gris-suave);
+    }
+  </style>
+</head>
+<body>
+  <div class="contenedor" id="app" style="display:none;">
+
+    <h1>Carga inicial del catálogo</h1>
+    <p class="subtit">Ciclo 07 · 802 productos extraídos del catálogo Natura</p>
+
+    <div class="tarjeta">
+      <h2>¿Qué hace esta página?</h2>
+      <p>
+        Esta página carga el catálogo completo del Ciclo 07 en Firestore,
+        bajo la colección <code>productos</code>. Está pensada para
+        ejecutarse <strong>una sola vez</strong> al inicializar el sistema.
+        Si se ejecuta de nuevo, sobreescribe (idempotente).
+      </p>
+      <ul>
+        <li>Se cargan exactamente <strong id="stat-total">802</strong> productos.</li>
+        <li>Cada producto se guarda en <code>productos/{codigo}</code>.</li>
+        <li>Los productos con datos sospechosos (precio o nombre) quedan con <code>estado: "revisar"</code>.</li>
+        <li>Podrás editarlos individualmente desde la futura página de gestión de productos.</li>
+      </ul>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Resumen del paquete</h2>
+      <div class="stats" id="stats-resumen">
+        <div class="stat"><div class="num" id="s-total">—</div><div class="lbl">Total</div></div>
+        <div class="stat"><div class="num" id="s-ok">—</div><div class="lbl">Listos</div></div>
+        <div class="stat"><div class="num" id="s-revisar">—</div><div class="lbl">A revisar</div></div>
+        <div class="stat"><div class="num" id="s-cats">—</div><div class="lbl">Categorías</div></div>
+      </div>
+      <div id="info-paquete" class="alerta info">Cargando paquete <code>productos-seed.json</code>…</div>
+    </div>
+
+    <div class="tarjeta" id="bloque-accion">
+      <h2>Cargar a Firestore</h2>
+      <p>
+        Se usarán <strong>batched writes</strong> de hasta 500 documentos por lote
+        para minimizar costo y latencia (típicamente 2 lotes).
+      </p>
+      <div class="barra-progreso"><div id="barra"></div></div>
+      <div class="progreso-texto">
+        <span id="prog-actual">0</span>
+        <span id="prog-tasa"></span>
+      </div>
+
+      <div id="estado-carga" style="margin-top:16px;"></div>
+
+      <button class="btn-primario" id="btn-cargar" disabled>
+        Iniciar carga del catálogo
+      </button>
+
+      <div class="log" id="log"></div>
+
+      <div class="acciones-pie">
+        <button class="btn-link" onclick="location.href='../index.html'">← Volver al login</button>
+        <button class="btn-link" id="btn-verificar">Verificar carga existente</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="esperando" id="esperando">
+    Verificando sesión…
+  </div>
+
+  <script type="module">
+    import { requireAuth, logout, getUsuarioActual } from "../js/auth.js";
+    import { db } from "../js/firebase-config.js";
+    import {
+      writeBatch, doc, collection, getDocs, query, limit
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Refs
+    const $app       = document.getElementById('app');
+    const $esperando = document.getElementById('esperando');
+    const $btnCargar = document.getElementById('btn-cargar');
+    const $btnVerif  = document.getElementById('btn-verificar');
+    const $barra     = document.getElementById('barra');
+    const $progAct   = document.getElementById('prog-actual');
+    const $progTasa  = document.getElementById('prog-tasa');
+    const $estado    = document.getElementById('estado-carga');
+    const $log       = document.getElementById('log');
+
+    function log(msg, tipo = "info") {
+      $log.classList.add('visible');
+      const linea = document.createElement('div');
+      linea.className = tipo;
+      linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      $log.appendChild(linea);
+      $log.scrollTop = $log.scrollHeight;
+    }
+    function alerta(html, tipo = "info") {
+      $estado.innerHTML = `<div class="alerta ${tipo}">${html}</div>`;
+    }
+
+    // ---------- 1. Guard de autenticación + rol admin ----------
+    const usuario = await requireAuth({ requireAdmin: true });
+    $esperando.style.display = 'none';
+    $app.style.display = 'block';
+    log(`Sesión: ${usuario.email} (rol: ${usuario.rol})`, "ok");
+
+    // ---------- 2. Cargar el JSON del seed ----------
+    let productos = [];
+    try {
+      const res = await fetch('./productos-seed.json');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      productos = await res.json();
+      log(`productos-seed.json cargado: ${productos.length} productos`, "ok");
+
+      const ok      = productos.filter(p => p.estado === 'activo').length;
+      const revisar = productos.filter(p => p.estado === 'revisar').length;
+      const cats    = new Set(productos.map(p => p.categoria)).size;
+
+      document.getElementById('s-total').textContent   = productos.length;
+      document.getElementById('s-ok').textContent      = ok;
+      document.getElementById('s-revisar').textContent = revisar;
+      document.getElementById('s-cats').textContent    = cats;
+      document.getElementById('info-paquete').className = 'alerta aviso';
+      document.getElementById('info-paquete').innerHTML =
+        `<strong>Importante:</strong> ${revisar} productos quedan con <code>estado: "revisar"</code>
+         porque tienen precio incompleto o nombre poco claro en el catálogo origen.
+         Aparecerán en la página de productos con una etiqueta visual para que los corrijas.`;
+
+      $btnCargar.disabled = false;
+    } catch (e) {
+      alerta(`No se pudo cargar productos-seed.json: ${e.message}`, "error");
+      log(`ERROR cargando seed: ${e.message}`, "err");
+    }
+
+    // ---------- 3. Verificar carga existente ----------
+    $btnVerif.addEventListener('click', async () => {
+      try {
+        const q = query(collection(db, "productos"), limit(1));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          alerta("La colección <code>productos</code> está vacía. Podés cargar.", "info");
+        } else {
+          // Contar (limitado: solo trae 1 doc, pero Firestore no permite count() trivial)
+          alerta("Ya existen documentos en <code>productos</code>. Si seguís, los datos serán sobreescritos.", "aviso");
+        }
+      } catch (e) {
+        alerta(`Error verificando: ${e.message}. Revisá las reglas de Firestore.`, "error");
+      }
+    });
+
+    // ---------- 4. Cargar a Firestore con batched writes ----------
+    $btnCargar.addEventListener('click', async () => {
+      if (!productos.length) return;
+
+      if (!confirm(`¿Cargar ${productos.length} productos en Firestore?\n\nSi ya existe un catálogo, será sobreescrito.`)) {
+        return;
+      }
+
+      $btnCargar.disabled = true;
+      $btnVerif.disabled  = true;
+
+      const t0 = performance.now();
+      const TAMANO_LOTE = 500;     // Firestore limita 500 ops por batch
+      let cargados = 0;
+      let errores  = 0;
+
+      try {
+        for (let i = 0; i < productos.length; i += TAMANO_LOTE) {
+          const lote = productos.slice(i, i + TAMANO_LOTE);
+          const batch = writeBatch(db);
+          for (const p of lote) {
+            const ref = doc(db, "productos", p.id);
+            batch.set(ref, {
+              ...p,
+              creadoEn: new Date(),
+              cargadoPor: usuario.email
+            });
+          }
+          try {
+            await batch.commit();
+            cargados += lote.length;
+            log(`Lote ${Math.ceil((i + lote.length) / TAMANO_LOTE)}: ${lote.length} productos OK`, "ok");
+          } catch (e) {
+            errores += lote.length;
+            log(`Lote ${Math.ceil((i + lote.length) / TAMANO_LOTE)} FALLÓ: ${e.message}`, "err");
+            // Continuar con el siguiente lote
+          }
+
+          const pct = ((i + lote.length) / productos.length) * 100;
+          $barra.style.width = pct + '%';
+          $progAct.textContent = `${i + lote.length} / ${productos.length}`;
+        }
+
+        const t1 = performance.now();
+        const seg = ((t1 - t0) / 1000).toFixed(1);
+        $progTasa.textContent = `${seg}s · ${Math.round(cargados / parseFloat(seg))} prod/s`;
+
+        if (errores === 0) {
+          alerta(
+            `Carga completada: <strong>${cargados} productos</strong> en ${seg}s.<br>
+             Listo para la Fase 1 (dashboard).`,
+            "exito"
+          );
+          $btnCargar.textContent = "Carga finalizada";
+        } else {
+          alerta(
+            `Carga parcial: ${cargados} OK, ${errores} con error. Revisá el log.`,
+            "aviso"
+          );
+          $btnCargar.disabled = false;
+        }
+
+      } catch (e) {
+        alerta(`Error inesperado: ${e.message}`, "error");
+        log(`FATAL: ${e.message}`, "err");
+        $btnCargar.disabled = false;
+      }
+    });
+
+  </script>
+</body>
+</html>

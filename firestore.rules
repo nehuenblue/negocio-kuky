@@ -1,0 +1,104 @@
+// =====================================================================
+// Emanuel Cosméticos — Firestore Security Rules
+// Versión: F0 (autenticación obligatoria + control por rol admin)
+//
+// Modelo:
+//   - Todos los accesos requieren request.auth != null
+//   - Lectura/escritura de cualquier colección de negocio requiere rol
+//     "admin" en /usuarios/{uid}
+//   - El propio usuario puede leer su documento /usuarios/{uid}
+//   - Nadie puede modificar su rol desde el cliente (solo desde consola
+//     o desde una Cloud Function con privilegios)
+//
+// IMPORTANTE: Pegar este archivo en Firebase Console → Firestore →
+// Rules → Publicar.
+// =====================================================================
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function esAdmin() {
+      return autenticado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
+    }
+
+    function noModificaRol() {
+      // Bloquear que un usuario edite su propio rol desde el cliente
+      return !('rol' in request.resource.data.diff(resource.data).affectedKeys());
+    }
+
+    // ---------- /usuarios/{uid} ----------
+    // Cada usuario puede leer SU propio documento. Solo admin puede
+    // listar/crear/modificar usuarios. Nadie puede cambiar su rol
+    // desde el cliente.
+    match /usuarios/{uid} {
+      allow read: if autenticado() && (request.auth.uid == uid || esAdmin());
+      allow list: if esAdmin();
+      allow create: if esAdmin();
+      allow update: if esAdmin() && noModificaRol();
+      allow delete: if esAdmin();
+    }
+
+    // ---------- Catálogo de productos ----------
+    match /productos/{codigo} {
+      allow read: if autenticado();
+      allow write: if esAdmin();
+    }
+
+    // ---------- Clientes (PII — Ley 25.326) ----------
+    match /clientes/{clienteId} {
+      allow read: if autenticado();
+      allow write: if esAdmin();
+    }
+
+    // ---------- Ventas ----------
+    match /ventas/{ventaId} {
+      allow read: if autenticado();
+      allow create: if esAdmin();
+      // No permitir editar una venta una vez creada (integridad histórica).
+      // Para "anular" se actualiza solo el campo estadoPedido a "cancelado".
+      allow update: if esAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['estadoPedido', 'observaciones', 'fechaEntrega', 'actualizadoEn']);
+      allow delete: if false;
+    }
+
+    // ---------- Pagos ----------
+    match /pagos/{pagoId} {
+      allow read: if autenticado();
+      allow create: if esAdmin();
+      // Mismo principio: no editar/borrar pagos históricos.
+      allow update, delete: if false;
+    }
+
+    // ---------- Movimientos de fondos ----------
+    match /movimientosFondos/{movId} {
+      allow read: if autenticado();
+      allow create: if esAdmin();
+      allow update: if esAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['descripcion', 'actualizadoEn']);
+      allow delete: if false;
+    }
+
+    // ---------- Configuración global ----------
+    match /configuracion/{docId} {
+      allow read: if autenticado();
+      allow write: if esAdmin();
+    }
+
+    // ---------- Default deny ----------
+    // Cualquier ruta no contemplada arriba queda bloqueada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
