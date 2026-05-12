@@ -19,48 +19,68 @@
 
   <style>
     /* Layout: mapa a pantalla completa con panel de filtros lateral */
-    html, body { height: 100%; margin: 0; }
-    body { overflow: hidden; }
-    .app { height: 100vh; }
-    .main-wrapper { height: 100vh; }
-    .main { height: 100vh !important; padding: 0 !important; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    .app, .main-wrapper {
+      height: 100vh !important;
+      width: 100%;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .main {
+      height: 100vh !important;
+      width: 100%;
+      padding: 0 !important;
+      margin: 0 !important;
+      max-width: none !important;
+    }
 
     .mapa-layout {
       display: flex;
       flex-direction: row;
       height: 100vh;
-      width: 100%;
+      width: 100vw;
     }
     .panel-filtros-wrap {
       width: 320px;
       flex-shrink: 0;
       height: 100vh;
+      overflow: hidden;
     }
     .mapa-wrap {
-      flex: 1;
+      flex: 1 1 auto;
       height: 100vh;
       position: relative;
+      min-width: 200px;
     }
     #mapa-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       width: 100%;
-      height: 100vh;
-      min-height: 500px;
+      height: 100%;
       background: #e8e0d4;
     }
     @media (max-width: 900px) {
-      body { overflow: auto; }
+      html, body { overflow: auto; }
       .mapa-layout {
         flex-direction: column;
         height: auto;
+        min-height: 100vh;
       }
       .panel-filtros-wrap {
         width: 100%;
         height: auto;
+        max-height: 50vh;
       }
       .mapa-wrap {
-        height: 60vh;
-      }
-      #mapa-container {
+        width: 100%;
         height: 60vh;
         min-height: 400px;
       }
