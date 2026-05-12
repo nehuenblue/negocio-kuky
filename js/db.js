@@ -821,7 +821,7 @@ export async function registrarPago(datos) {
 // =====================================================================
 //  PAGOS
 // =====================================================================
-export async function listarPagos({ desde = null, hasta = null, clienteId = null } = {}) {
+export async function listarPagos({ desde = null, hasta = null, clienteId = null, incluirAnulados = false } = {}) {
   const filtros = [];
   if (desde)     filtros.push(where("fecha", ">=", Timestamp.fromDate(aDate(desde))));
   if (hasta)     filtros.push(where("fecha", "<=", Timestamp.fromDate(aDate(hasta))));
@@ -829,7 +829,97 @@ export async function listarPagos({ desde = null, hasta = null, clienteId = null
   filtros.push(orderBy("fecha", "desc"));
   const q = query(collection(db, "pagos"), ...filtros);
   const snap = await getDocs(q);
+  let pagos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (!incluirAnulados) {
+    pagos = pagos.filter(p => p.anulado !== true);
+  }
+  return pagos;
+}
+
+/**
+ * Lista los pagos de una venta específica (incluye anulados).
+ */
+export async function listarPagosDeVenta(ventaId) {
+  if (!ventaId) return [];
+  const q = query(
+    collection(db, "pagos"),
+    where("ventaId", "==", ventaId),
+    orderBy("fecha", "desc")
+  );
+  const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Anula un pago: lo marca como anulado (no se borra) y revierte
+ * los contadores de la venta y del cliente. Transacción atómica.
+ */
+export async function anularPago(pagoId, motivo = "") {
+  if (!pagoId) throw new Error("Falta el ID del pago.");
+  const email = auth.currentUser?.email || "desconocido";
+  const pagoRef = doc(db, "pagos", pagoId);
+
+  await runTransaction(db, async (transaction) => {
+    const pagoSnap = await transaction.get(pagoRef);
+    if (!pagoSnap.exists()) throw new Error("El pago no existe.");
+    const pago = pagoSnap.data();
+
+    if (pago.anulado === true) {
+      throw new Error("Este pago ya está anulado.");
+    }
+
+    const monto = Number(pago.monto) || 0;
+
+    // Leer venta y cliente (necesario antes de cualquier write en la transacción)
+    let ventaSnap = null;
+    let venta = null;
+    if (pago.ventaId) {
+      const ventaRef = doc(db, "ventas", pago.ventaId);
+      ventaSnap = await transaction.get(ventaRef);
+      if (ventaSnap.exists()) venta = ventaSnap.data();
+    }
+    let clienteSnap = null;
+    let cliente = null;
+    if (pago.clienteId) {
+      const clienteRef = doc(db, "clientes", pago.clienteId);
+      clienteSnap = await transaction.get(clienteRef);
+      if (clienteSnap.exists()) cliente = clienteSnap.data();
+    }
+
+    // Revertir venta
+    if (venta) {
+      const nuevoPagado = Math.max(0, (venta.pagado || 0) - monto);
+      const nuevoSaldo  = (venta.total || 0) - nuevoPagado;
+      let nuevoEstadoPago;
+      if (nuevoSaldo === 0)      nuevoEstadoPago = "pagado";
+      else if (nuevoPagado > 0)  nuevoEstadoPago = "parcial";
+      else                       nuevoEstadoPago = "debe";
+
+      transaction.update(doc(db, "ventas", pago.ventaId), {
+        pagado: nuevoPagado,
+        saldo:  nuevoSaldo,
+        estadoPago: nuevoEstadoPago,
+        actualizadoEn: serverTimestamp(),
+      });
+    }
+
+    // Revertir cliente
+    if (cliente) {
+      transaction.update(doc(db, "clientes", pago.clienteId), {
+        totalPagado:    Math.max(0, (cliente.totalPagado || 0) - monto),
+        saldoPendiente: (cliente.saldoPendiente || 0) + monto,
+        actualizadoEn:  serverTimestamp(),
+      });
+    }
+
+    // Marcar el pago como anulado (NO se borra)
+    transaction.update(pagoRef, {
+      anulado: true,
+      anuladoEn: serverTimestamp(),
+      anuladoPor: email,
+      motivoAnulacion: (motivo || "").trim(),
+    });
+  });
 }
 
 // =====================================================================
