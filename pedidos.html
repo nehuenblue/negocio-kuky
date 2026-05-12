@@ -255,10 +255,19 @@
       </div>
 
       <!-- Estados (display) -->
-      <div class="flex flex-gap-sm flex-wrap mb-md">
-        <span class="estado" id="det-estado-pago">—</span>
-        <span class="estado" id="det-estado-pedido">—</span>
-        <span class="badge badge-neutral" id="det-forma-pago">—</span>
+      <div class="flex flex-gap-md flex-wrap mb-md" style="align-items: center; padding: 12px 14px; background: var(--crema-clara); border-radius: var(--radio-md);">
+        <div>
+          <div style="font-size: 10px; color: var(--gris-suave); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px;">Pago</div>
+          <span class="estado" id="det-estado-pago">—</span>
+        </div>
+        <div>
+          <div style="font-size: 10px; color: var(--gris-suave); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px;">Pedido</div>
+          <span class="estado" id="det-estado-pedido">—</span>
+        </div>
+        <div>
+          <div style="font-size: 10px; color: var(--gris-suave); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px;">Forma de pago</div>
+          <span class="badge badge-neutral" id="det-forma-pago">—</span>
+        </div>
       </div>
 
       <!-- Selector editable de estado del pedido -->
