@@ -47,8 +47,36 @@ const $statAdeudado = $('#stat-adeudado');
 const $botonesZonas = $('#botones-zonas-mapa');
 
 // =====================================================================
-// INIT MAPA LEAFLET
+// INIT MAPA LEAFLET (espera a que el contenedor tenga tamaño real)
 // =====================================================================
+function esperarContenedorConTamano() {
+  return new Promise(resolve => {
+    const el = document.getElementById('mapa-container');
+    if (!el) { resolve(null); return; }
+
+    // Si ya tiene tamaño, listo
+    if (el.offsetWidth > 0 && el.offsetHeight > 0) {
+      resolve(el);
+      return;
+    }
+
+    // Sino, observamos hasta que tenga
+    const obs = new ResizeObserver(() => {
+      if (el.offsetWidth > 0 && el.offsetHeight > 0) {
+        obs.disconnect();
+        resolve(el);
+      }
+    });
+    obs.observe(el);
+
+    // Timeout de seguridad: si en 3 segundos no tiene tamaño, intentamos igual
+    setTimeout(() => {
+      obs.disconnect();
+      resolve(el);
+    }, 3000);
+  });
+}
+
 function inicializarMapa() {
   // Verificar que Leaflet esté cargado
   if (typeof L === 'undefined') {
@@ -61,14 +89,23 @@ function inicializarMapa() {
     throw new Error('Leaflet no está disponible');
   }
 
-  mapa = L.map('mapa-container').setView(
+  const el = document.getElementById('mapa-container');
+  console.log('[mapa] Creando con tamaño:', el.offsetWidth, 'x', el.offsetHeight);
+
+  mapa = L.map('mapa-container', {
+    // Opciones críticas para evitar el bug del scale 8x
+    zoomControl: true,
+    zoomSnap: 1,
+    zoomDelta: 1,
+    fadeAnimation: false,
+    zoomAnimation: false,    // CRÍTICO: desactivar animación de zoom evita el bug del scale
+    markerZoomAnimation: false,
+  }).setView(
     [CENTRO_DEFAULT.lat, CENTRO_DEFAULT.lng],
     CENTRO_DEFAULT.zoom
   );
 
-  // Capa de tiles: probamos múltiples proveedores con fallback automático.
-  // CartoDB Voyager es rápido, gratis y suele funcionar en redes argentinas
-  // donde OpenStreetMap directo está bloqueado.
+  // Capa de tiles
   const proveedores = [
     {
       nombre: 'CartoDB Voyager',
@@ -78,32 +115,13 @@ function inicializarMapa() {
         subdomains: 'abcd',
         maxZoom: 19,
       }
-    },
-    {
-      nombre: 'OpenStreetMap',
-      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      opts: {
-        attribution: '© OpenStreetMap',
-        maxZoom: 19,
-      }
-    },
-    {
-      nombre: 'OSM HOT',
-      url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-      opts: {
-        attribution: '© OpenStreetMap France',
-        maxZoom: 19,
-      }
     }
   ];
 
-  // Intentamos con el primero. Si falla un tile, Leaflet sigue funcionando
-  // pero quedan huecos. Por eso elegimos CartoDB que es muy estable.
   const proveedor = proveedores[0];
   console.log('[mapa] Usando proveedor de tiles:', proveedor.nombre);
   const tileLayer = L.tileLayer(proveedor.url, proveedor.opts);
 
-  // Detector: si en 5 segundos no cargó ningún tile, alertamos
   let tilesOK = 0;
   let tilesERR = 0;
   tileLayer.on('tileload', () => { tilesOK++; });
@@ -112,7 +130,7 @@ function inicializarMapa() {
   setTimeout(() => {
     if (tilesOK === 0 && tilesERR > 0) {
       console.error('[mapa] Ningún tile cargó. Total errores:', tilesERR);
-      toast(`No se pudieron cargar las imágenes del mapa. Probablemente tu red está bloqueando ${proveedor.nombre}.`, 'error');
+      toast(`No se pudieron cargar las imágenes del mapa.`, 'error');
     } else {
       console.log('[mapa] Tiles cargados:', tilesOK, '| Errores:', tilesERR);
     }
@@ -126,12 +144,26 @@ function inicializarMapa() {
       showCoverageOnHover: false,
       maxClusterRadius: 50,
       spiderfyOnMaxZoom: true,
+      animate: false,    // Sin animación = sin bug de scale
+      animateAddingMarkers: false,
     });
   } else {
     console.warn('[mapa] markercluster no disponible, usando FeatureGroup simple');
     cluster = L.featureGroup();
   }
   mapa.addLayer(cluster);
+
+  // FIX CRÍTICO: forzar invalidate y reseteo de vista después de un frame
+  // Esto elimina el bug del scale 8x que aparece cuando el mapa se crea
+  // con dimensiones que cambian después.
+  requestAnimationFrame(() => {
+    mapa.invalidateSize(true);
+    // Re-aplicar la vista para resetear cualquier estado raro de zoom
+    mapa.setView([CENTRO_DEFAULT.lat, CENTRO_DEFAULT.lng], CENTRO_DEFAULT.zoom, {
+      animate: false,
+      reset: true,
+    });
+  });
 }
 
 // =====================================================================
@@ -365,6 +397,10 @@ $btnLimpiar.addEventListener('click', () => {
 // =====================================================================
 // INIT
 // =====================================================================
+
+// CLAVE: esperar a que el contenedor tenga tamaño real antes de crear el mapa
+await esperarContenedorConTamano();
+
 inicializarMapa();
 renderBotonesZonas();
 
@@ -377,10 +413,8 @@ if (zonaQS) $filtroZona.value = zonaQS;
 
 await cargarDatos();
 
-// Forzar varios reajustes del mapa para garantizar render en cualquier viewport
-setTimeout(() => mapa?.invalidateSize(), 100);
-setTimeout(() => mapa?.invalidateSize(), 500);
-setTimeout(() => mapa?.invalidateSize(), 1000);
+// Forzar refresh final después de cargar los marcadores
+requestAnimationFrame(() => mapa?.invalidateSize(true));
 
 // También al cambiar el tamaño de ventana
 window.addEventListener('resize', () => {
