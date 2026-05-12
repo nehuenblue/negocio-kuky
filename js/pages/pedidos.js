@@ -11,7 +11,7 @@ import { requireAuth } from "../auth.js";
 import { renderLayout } from "../layout.js";
 import {
   listarVentas, obtenerVenta, cambiarEstadoPedido, registrarPago, obtenerCliente,
-  listarPagosDeVenta, anularPago
+  listarPagosDeVenta, anularPago, actualizarEntregaItems
 } from "../db.js";
 import {
   $, $$, escapeHTML, toast, debounce,
@@ -173,6 +173,14 @@ function filaVenta(v) {
   const claseEstadoPago = `estado-${v.estadoPago || 'debe'}`;
   const claseEstadoPedido = `estado-${v.estadoPedido || 'pendiente'}`;
 
+  // Para "parcial-entrega", mostrar conteo de items
+  let textoEstadoPedido = v.estadoPedido || 'pendiente';
+  if (v.estadoPedido === "parcial-entrega") {
+    const totalItems = (v.items || []).length;
+    const entregados = (v.items || []).filter(it => it.entregado === true).length;
+    textoEstadoPedido = `parcial (${entregados}/${totalItems})`;
+  }
+
   const itemsResumen = (v.items || []).length;
   const resumenItems = itemsResumen === 1
     ? (v.items[0]?.nombre || '').substring(0, 40)
@@ -197,7 +205,7 @@ function filaVenta(v) {
       <td class="alinear-derecha" style="color: var(--estado-ok);">${formatoMoneda(v.pagado)}</td>
       <td class="alinear-derecha" style="${(v.saldo || 0) > 0 ? 'color: var(--estado-error); font-weight: 500;' : 'color: var(--gris-suave);'}">${formatoMoneda(v.saldo)}</td>
       <td class="alinear-centro"><span class="estado ${claseEstadoPago}">${escapeHTML(v.estadoPago || 'debe')}</span></td>
-      <td class="alinear-centro"><span class="estado ${claseEstadoPedido}">${escapeHTML(v.estadoPedido || 'pendiente')}</span></td>
+      <td class="alinear-centro"><span class="estado ${claseEstadoPedido}">${escapeHTML(textoEstadoPedido)}</span></td>
     </tr>`;
 }
 
@@ -238,12 +246,16 @@ async function abrirDetalle(ventaId) {
   };
   $('#det-forma-pago').textContent = formasLabel[v.formaPago] || v.formaPago || 'Efectivo';
 
-  // Items
+  // Items con checkbox de entregado
   const items = v.items || [];
-  $('#det-items').innerHTML = items.map(it => {
+  $('#det-items').innerHTML = items.map((it, idx) => {
     const subtotal = it.subtotal || (it.cantidad * it.precioUnit);
+    const entregadoClase = it.entregado ? 'entregado' : '';
     return `
-      <div class="detalle-item">
+      <div class="detalle-item ${entregadoClase}" data-codigo="${escapeHTML(it.codigo)}" data-idx="${idx}">
+        <div class="check-entregado" data-codigo="${escapeHTML(it.codigo)}" title="${it.entregado ? 'Marcar como NO entregado' : 'Marcar como entregado'}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
         <div class="foto-d"><div class="ph">📷</div></div>
         <div>
           <div class="nom-d" title="${escapeHTML(it.nombre)}">${escapeHTML(it.nombre)}</div>
@@ -253,6 +265,39 @@ async function abrirDetalle(ventaId) {
         <div class="sub-d">${formatoMoneda(subtotal)}</div>
       </div>`;
   }).join('');
+
+  // Wire-up de checks de entregado
+  $$('#det-items .check-entregado').forEach($check => {
+    $check.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const codigo = $check.dataset.codigo;
+      const item = items.find(i => i.codigo === codigo);
+      if (!item) return;
+      const nuevoEstado = !item.entregado;
+
+      // Optimistic UI
+      $check.closest('.detalle-item').classList.toggle('entregado', nuevoEstado);
+
+      try {
+        await actualizarEntregaItems(v.id, [{ codigo, entregado: nuevoEstado }]);
+        // Actualizar localmente para mantener consistencia visual
+        item.entregado = nuevoEstado;
+        // Actualizar el estado del pedido en pantalla (puede haber cambiado a "entregado" / "parcial-entrega")
+        const ventaFresca = await obtenerVenta(v.id);
+        if (ventaFresca) {
+          ventaActual = ventaFresca;
+          $('#det-estado-pedido').textContent = ventaFresca.estadoPedido === "parcial-entrega" ? "parcial" : (ventaFresca.estadoPedido || 'pendiente');
+          $('#det-estado-pedido').className = `estado estado-${ventaFresca.estadoPedido || 'pendiente'}`;
+          $('#det-cambiar-estado').value = ventaFresca.estadoPedido === "parcial-entrega" ? "pendiente" : (ventaFresca.estadoPedido || 'pendiente');
+        }
+      } catch (err) {
+        console.error(err);
+        // Revertir UI
+        $check.closest('.detalle-item').classList.toggle('entregado', !nuevoEstado);
+        toast('No se pudo actualizar: ' + err.message, 'error');
+      }
+    });
+  });
 
   // Totales
   $('#det-subtotal').textContent = formatoMoneda(v.total);
@@ -363,6 +408,122 @@ function cerrarDetalle() {
 $('#cerrar-detalle').addEventListener('click', cerrarDetalle);
 $modalDetalle.addEventListener('click', (e) => {
   if (e.target === $modalDetalle) cerrarDetalle();
+});
+
+// =====================================================================
+// EDICIÓN INLINE DEL PAGADO
+// =====================================================================
+$('#btn-editar-pagado').addEventListener('click', () => {
+  if (!ventaActual) return;
+  $('#det-pagado-display').style.display = 'none';
+  $('#det-pagado-edit').style.display = 'flex';
+  $('#input-pagado-nuevo').value = ventaActual.pagado || 0;
+  $('#input-pagado-nuevo').max = ventaActual.total;
+  $('#input-pagado-nuevo').focus();
+  $('#input-pagado-nuevo').select();
+});
+
+$('#btn-cancelar-pagado').addEventListener('click', () => {
+  $('#det-pagado-display').style.display = 'flex';
+  $('#det-pagado-edit').style.display = 'none';
+});
+
+$('#btn-aplicar-pagado').addEventListener('click', async () => {
+  if (!ventaActual) return;
+
+  const montoNuevo = Number($('#input-pagado-nuevo').value);
+  const montoActual = ventaActual.pagado || 0;
+  const total = ventaActual.total || 0;
+
+  if (isNaN(montoNuevo) || montoNuevo < 0) {
+    toast('Ingresá un monto válido.', 'warn');
+    return;
+  }
+  if (montoNuevo > total) {
+    toast(`El pagado no puede ser mayor al total (${formatoMoneda(total)}).`, 'warn');
+    return;
+  }
+  if (montoNuevo === montoActual) {
+    $('#det-pagado-display').style.display = 'flex';
+    $('#det-pagado-edit').style.display = 'none';
+    return;
+  }
+
+  const $btn = $('#btn-aplicar-pagado');
+  $btn.disabled = true;
+  $btn.innerHTML = '<span class="cargando-spinner"></span>';
+
+  try {
+    if (montoNuevo > montoActual) {
+      // Caso A: subir el monto → registrar pago adicional
+      const diferencia = montoNuevo - montoActual;
+      if (!confirm(`Vas a registrar un pago adicional de ${formatoMoneda(diferencia)}.\n\n¿Continuar?`)) {
+        $btn.disabled = false;
+        $btn.textContent = 'Aplicar';
+        return;
+      }
+      await registrarPago({
+        ventaId:       ventaActual.id,
+        monto:         diferencia,
+        formaPago:     ventaActual.formaPago || 'efectivo',
+        observaciones: 'Ajuste de pagado desde el detalle del pedido',
+      });
+      toast('Pago registrado.', 'ok');
+
+    } else {
+      // Caso B: bajar el monto → hay que anular pagos hasta llegar al monto deseado
+      const reducir = montoActual - montoNuevo;
+      if (!confirm(`Vas a reducir el pagado de ${formatoMoneda(montoActual)} a ${formatoMoneda(montoNuevo)}.\n\nSe van a anular pagos por un total de ${formatoMoneda(reducir)} (empezando por los más recientes).\n\n¿Continuar?`)) {
+        $btn.disabled = false;
+        $btn.textContent = 'Aplicar';
+        return;
+      }
+
+      // Buscar los pagos no anulados, ordenados por fecha (más recientes primero)
+      const pagos = await listarPagosDeVenta(ventaActual.id);
+      const pagosActivos = pagos.filter(p => p.anulado !== true);
+
+      // Si reducir == suma exacta de algunos pagos, los anulamos.
+      // Si no, anulamos los más nuevos hasta acercarnos lo más posible.
+      let restante = reducir;
+      const anular = [];
+      for (const p of pagosActivos) {
+        if (restante <= 0) break;
+        if (p.monto <= restante) {
+          anular.push(p);
+          restante -= p.monto;
+        }
+      }
+
+      if (restante > 0) {
+        toast(`No se puede ajustar exacto. Quedarían ${formatoMoneda(restante)} sin poder restar (los pagos no calzan exacto). Anulá pagos manualmente desde el historial.`, 'warn');
+        $btn.disabled = false;
+        $btn.textContent = 'Aplicar';
+        return;
+      }
+
+      // Anular en serie
+      for (const p of anular) {
+        await anularPago(p.id, 'Ajuste de pagado desde el detalle del pedido');
+      }
+      toast(`Pagos anulados (${anular.length}).`, 'ok');
+    }
+
+    // Recargar el detalle con los datos frescos
+    const ventaFresca = await obtenerVenta(ventaActual.id);
+    if (ventaFresca) {
+      ventaActual = ventaFresca;
+      abrirDetalle(ventaActual.id);  // refresca todo el modal
+    }
+    await recargar();  // refresca la tabla principal
+
+  } catch (err) {
+    console.error(err);
+    toast('Error: ' + err.message, 'error');
+  } finally {
+    $btn.disabled = false;
+    $btn.textContent = 'Aplicar';
+  }
 });
 
 // =====================================================================
