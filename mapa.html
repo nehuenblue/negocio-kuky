@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f8f1e9" />
+  <title>Emanuel Cosméticos · Mapa</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+  <link rel="icon" type="image/jpeg" href="assets/logo.jpg" />
+  <link rel="stylesheet" href="assets/styles.css" />
+
+  <style>
+    /* Layout: mapa a pantalla completa con panel de filtros lateral */
+    .mapa-layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      height: calc(100vh - 60px);
+      gap: 0;
+    }
+    @media (max-width: 900px) {
+      .mapa-layout {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .panel-filtros {
+        max-height: none;
+      }
+      #mapa-container {
+        height: 60vh;
+      }
+    }
+
+    /* Panel lateral */
+    .panel-filtros {
+      background: var(--crema-clara);
+      border-right: 1px solid var(--linea);
+      overflow-y: auto;
+      padding: 20px;
+    }
+    .panel-filtros h2 {
+      font-family: var(--font-serif);
+      font-size: 24px;
+      color: var(--tinta);
+      margin: 0 0 4px 0;
+    }
+    .panel-filtros .subtitulo-panel {
+      color: var(--terracota);
+      font-size: 12px;
+      margin-bottom: 20px;
+    }
+
+    /* Stats arriba del panel */
+    .stats-mapa {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .stat-mapa {
+      background: white;
+      padding: 10px 12px;
+      border-radius: var(--radio-md);
+      border: 1px solid var(--linea);
+    }
+    .stat-mapa .lbl {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--rose-profundo);
+    }
+    .stat-mapa .val {
+      font-family: var(--font-serif);
+      font-size: 22px;
+      color: var(--tinta);
+      font-weight: 500;
+      line-height: 1.1;
+      margin-top: 2px;
+    }
+    .stat-mapa .val.error { color: var(--estado-error); }
+
+    /* Botones de zonas rápidas */
+    .botones-zonas-mapa {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .btn-zona-mapa {
+      flex: 1;
+      min-width: calc(33% - 6px);
+      padding: 8px 6px;
+      background: white;
+      color: var(--terracota);
+      border: 1px solid var(--linea);
+      border-radius: var(--radio-md);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--t-rapida);
+      text-align: center;
+    }
+    .btn-zona-mapa:hover {
+      background: var(--rose-claro);
+      border-color: var(--rose-palo);
+    }
+    .btn-zona-mapa.activo {
+      background: var(--terracota);
+      color: white;
+      border-color: var(--terracota);
+    }
+    .btn-zona-mapa.todas {
+      flex: 1 1 100%;
+      background: var(--crema-oscura);
+    }
+
+    /* Filtros */
+    .seccion-filtro {
+      margin-bottom: 16px;
+    }
+    .seccion-filtro label {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--rose-profundo);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .seccion-filtro .input,
+    .seccion-filtro .select {
+      width: 100%;
+    }
+
+    .check-filtro {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--tinta);
+    }
+    .check-filtro input { cursor: pointer; }
+
+    /* Mapa */
+    #mapa-container {
+      height: 100%;
+      width: 100%;
+    }
+
+    /* Marker custom */
+    .marker-custom {
+      width: 26px;
+      height: 26px;
+      border-radius: 50% 50% 50% 0;
+      background: var(--terracota);
+      border: 2px solid white;
+      transform: rotate(-45deg);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .marker-custom.debe { background: var(--estado-error); }
+    .marker-custom.aldia { background: var(--estado-ok); }
+    .marker-custom.inactivo { background: var(--gris-suave); }
+    .marker-custom span {
+      color: white;
+      transform: rotate(45deg);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Popup del marker */
+    .leaflet-popup-content-wrapper {
+      border-radius: var(--radio-md);
+      box-shadow: var(--sombra-md);
+      padding: 0;
+    }
+    .leaflet-popup-content {
+      margin: 0;
+      padding: 14px;
+      font-family: var(--font-sans);
+      min-width: 220px;
+    }
+    .popup-nombre {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tinta);
+      margin-bottom: 4px;
+    }
+    .popup-meta {
+      font-size: 11px;
+      color: var(--gris-suave);
+      margin-bottom: 12px;
+    }
+    .popup-saldo {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-top: 1px solid var(--linea);
+      font-size: 13px;
+    }
+    .popup-saldo.debe {
+      color: var(--estado-error);
+      font-weight: 500;
+    }
+    .popup-acciones {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .popup-btn {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: var(--radio-sm);
+      font-size: 11px;
+      font-weight: 500;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1px solid var(--linea);
+      background: white;
+      color: var(--terracota);
+      font-family: inherit;
+      transition: all var(--t-rapida);
+    }
+    .popup-btn:hover {
+      background: var(--rose-claro);
+    }
+    .popup-btn.primary {
+      background: var(--terracota);
+      color: white;
+      border-color: var(--terracota);
+    }
+
+    /* Botón volver (mobile) */
+    .btn-volver-mapa {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      background: white;
+      border: 1px solid var(--linea);
+      box-shadow: var(--sombra-md);
+      padding: 8px 12px;
+      border-radius: var(--radio-md);
+      text-decoration: none;
+      color: var(--terracota);
+      font-size: 13px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="cargando-pantalla" id="pantalla-carga">
+    <div class="contenido">
+      <div class="spinner-grande"></div>
+      <div class="etiqueta">Cargando mapa</div>
+    </div>
+  </div>
+
+  <div class="app" id="app" style="display:none;">
+    <div class="main-wrapper">
+      <main class="main" style="padding: 0;">
+
+        <div class="mapa-layout">
+
+          <!-- Panel de filtros -->
+          <aside class="panel-filtros">
+            <h2>Mapa<em>.</em></h2>
+            <p class="subtitulo-panel" id="resumen-mapa">Cargando…</p>
+
+            <!-- Stats -->
+            <div class="stats-mapa">
+              <div class="stat-mapa">
+                <div class="lbl">Visibles</div>
+                <div class="val" id="stat-visibles">0</div>
+              </div>
+              <div class="stat-mapa">
+                <div class="lbl">Adeudado</div>
+                <div class="val error" id="stat-adeudado">$ 0</div>
+              </div>
+            </div>
+
+            <!-- Zonas rápidas -->
+            <div class="seccion-filtro">
+              <label>Ir a zona</label>
+              <div class="botones-zonas-mapa" id="botones-zonas-mapa"></div>
+            </div>
+
+            <!-- Buscador -->
+            <div class="seccion-filtro">
+              <label for="buscador">Buscar cliente</label>
+              <input type="search" class="input" id="buscador" placeholder="Nombre o teléfono…" />
+            </div>
+
+            <!-- Filtro estado -->
+            <div class="seccion-filtro">
+              <label for="filtro-estado">Estado</label>
+              <select class="select" id="filtro-estado">
+                <option value="">Todos los activos</option>
+                <option value="deudores">Solo deudores</option>
+                <option value="al-dia">Solo al día</option>
+                <option value="inactivos">Solo inactivos</option>
+                <option value="todos">Todos (incluye inactivos)</option>
+              </select>
+            </div>
+
+            <!-- Filtro zona específica -->
+            <div class="seccion-filtro">
+              <label for="filtro-zona">Zona / Barrio</label>
+              <select class="select" id="filtro-zona">
+                <option value="">Todas las zonas</option>
+              </select>
+            </div>
+
+            <!-- Toggle: solo con pedidos pendientes -->
+            <div class="seccion-filtro">
+              <label class="check-filtro">
+                <input type="checkbox" id="check-pendientes" />
+                Solo clientes con pedidos pendientes
+              </label>
+            </div>
+
+            <button class="btn btn-fantasma btn-sm" id="btn-limpiar" style="width: 100%; margin-top: 10px;">Limpiar filtros</button>
+
+            <!-- Volver al dashboard (desktop) -->
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--linea);">
+              <a href="dashboard.html" class="btn btn-fantasma btn-sm" style="width: 100%;">← Dashboard</a>
+            </div>
+          </aside>
+
+          <!-- Mapa -->
+          <div style="position: relative;">
+            <div id="mapa-container"></div>
+          </div>
+
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script type="module" src="js/pages/mapa.js"></script>
+</body>
+</html>
