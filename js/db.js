@@ -1104,6 +1104,124 @@ export async function distribucionPorCategoria({ desde, hasta } = {}) {
     .sort((a, b) => b.total - a.total);
 }
 
+/**
+ * Ranking de los mejores clientes por monto comprado en el período.
+ */
+export async function rankingClientes({ desde, hasta, topN = 10 } = {}) {
+  const ventas = await listarVentas({ desde, hasta });
+  const acumulado = {};
+  for (const v of ventas) {
+    if (v.estadoPedido === "cancelado") continue;
+    const id = v.clienteId;
+    if (!id) continue;
+    if (!acumulado[id]) {
+      acumulado[id] = {
+        clienteId: id,
+        clienteNombre: v.clienteNombre || 'Sin nombre',
+        cantidadCompras: 0,
+        totalComprado: 0,
+        totalPagado: 0,
+        totalSaldo: 0,
+      };
+    }
+    acumulado[id].cantidadCompras += 1;
+    acumulado[id].totalComprado += (v.total || 0);
+    acumulado[id].totalPagado += (v.pagado || 0);
+    acumulado[id].totalSaldo += (v.saldo || 0);
+  }
+  return Object.values(acumulado)
+    .sort((a, b) => b.totalComprado - a.totalComprado)
+    .slice(0, topN);
+}
+
+/**
+ * Productos que NO se vendieron en los últimos N días.
+ * Útil para identificar stock parado.
+ */
+export async function productosSinMovimiento(diasSinVenta = 30) {
+  const desde = new Date();
+  desde.setDate(desde.getDate() - diasSinVenta);
+  desde.setHours(0, 0, 0, 0);
+
+  // Productos vendidos recientemente
+  const ventas = await listarVentas({ desde });
+  const codigosConVenta = new Set();
+  for (const v of ventas) {
+    if (v.estadoPedido === "cancelado") continue;
+    for (const it of (v.items || [])) {
+      if (it.codigo) codigosConVenta.add(it.codigo);
+    }
+  }
+
+  // Productos del catálogo activos
+  const productos = await listarProductos({ soloActivos: true });
+
+  // Los que NO están en la lista de vendidos
+  return productos
+    .filter(p => !codigosConVenta.has(p.id))
+    .filter(p => (p.precio || 0) > 0); // ignoramos los sin precio
+}
+
+/**
+ * Productos con stock <= umbral (default 5).
+ * Solo cuenta los que tienen stock cargado y precio.
+ */
+export async function productosStockBajo(umbral = 5) {
+  const productos = await listarProductos({ soloActivos: true });
+  return productos
+    .filter(p => (p.precio || 0) > 0)
+    .filter(p => typeof p.stock === 'number' && p.stock <= umbral)
+    .sort((a, b) => (a.stock || 0) - (b.stock || 0));
+}
+
+/**
+ * Ganancia estimada del período: ingreso por ventas (no canceladas) menos
+ * costo total de los productos vendidos.
+ * Solo cuenta items que tienen costo cargado en el catálogo.
+ */
+export async function gananciaEstimada({ desde, hasta } = {}) {
+  const [ventas, productos] = await Promise.all([
+    listarVentas({ desde, hasta }),
+    listarProductos({ soloActivos: false }),
+  ]);
+
+  // Mapa codigo → costo
+  const costoPorCodigo = {};
+  for (const p of productos) {
+    costoPorCodigo[p.id] = Number(p.costo) || 0;
+  }
+
+  let ingresoTotal = 0;
+  let costoTotal = 0;
+  let itemsConCosto = 0;
+  let itemsSinCosto = 0;
+
+  for (const v of ventas) {
+    if (v.estadoPedido === "cancelado") continue;
+    ingresoTotal += (v.total || 0);
+
+    for (const it of (v.items || [])) {
+      const costoUnit = costoPorCodigo[it.codigo] || 0;
+      if (costoUnit > 0) {
+        costoTotal += costoUnit * (it.cantidad || 0);
+        itemsConCosto += (it.cantidad || 0);
+      } else {
+        itemsSinCosto += (it.cantidad || 0);
+      }
+    }
+  }
+
+  return {
+    ingresoTotal,
+    costoTotal,
+    gananciaBruta: ingresoTotal - costoTotal,
+    margenPct: ingresoTotal > 0 ? ((ingresoTotal - costoTotal) / ingresoTotal) * 100 : 0,
+    itemsConCosto,
+    itemsSinCosto,
+    cantidadVentas: ventas.filter(v => v.estadoPedido !== "cancelado").length,
+  };
+}
+
 // =====================================================================
 //  RE-EXPORTS
 // =====================================================================
