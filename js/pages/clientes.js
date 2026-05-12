@@ -2,24 +2,26 @@
 // Emanuel Cosméticos · Clientes (js/pages/clientes.js)
 // ---------------------------------------------------------------------
 // Funcionalidad:
-//   - Listado paginado con buscador en vivo + filtros (estado, zona)
-//   - Selección múltiple para acciones masivas (PDF/Excel/WhatsApp en F8)
+//   - Listado con buscador + filtros (estado, zona)
+//   - Selección múltiple (acciones masivas conectan en F8)
 //   - Modal de alta/edición con validaciones
-//   - Mini-mapa Leaflet integrado: click marca, pegar coords funciona
-//   - Modal de ficha individual con KPIs, datos, ubicación
-//   - Acceso vía ?id=xxx para abrir ficha directo desde el dashboard
+//   - Mini-mapa Leaflet con botones de zonas rápidas (Villa Pehuenia,
+//     Moquehue, Lonco Luan, Aluminé, Zapala) + Mi ubicación GPS
+//   - Ficha individual con KPIs, datos, mapa
+//   - ?id=xxx abre ficha directo desde dashboard
 // =====================================================================
 
 import { requireAuth } from "../auth.js";
 import { renderLayout } from "../layout.js";
 import {
-  listarClientes, listarZonas, crearCliente, actualizarCliente,
+  listarClientes, crearCliente, actualizarCliente,
   obtenerCliente, darDeBajaCliente, reactivarCliente,
   GeoPoint
 } from "../db.js";
+import { ZONAS, CENTRO_DEFAULT } from "../zonas.js";
 import {
   $, $$, escapeHTML, toast, debounce, formatoMoneda, formatoMonedaPartes,
-  formatoFecha, fechaRelativa, esTelefonoArgentino, normalizarTelefono
+  fechaRelativa, esTelefonoArgentino, normalizarTelefono
 } from "../utils.js";
 
 // =====================================================================
@@ -66,13 +68,13 @@ renderLayout({ usuario, paginaActiva: "clientes" });
 // =====================================================================
 // Estado
 // =====================================================================
-let clientesData     = [];      // todos los clientes traídos de Firestore
-let clientesFiltrados = [];     // los que matchean los filtros actuales
-let seleccionados    = new Set(); // IDs seleccionados
-let mapaForm         = null;    // instancia Leaflet del modal alta/edición
-let markerForm       = null;
-let mapaFicha        = null;
-let modoEdicion      = false;   // false = alta, true = edición
+let clientesData      = [];
+let clientesFiltrados = [];
+let seleccionados     = new Set();
+let mapaForm          = null;
+let markerForm        = null;
+let mapaFicha         = null;
+let modoEdicion       = false;
 
 const $buscador        = $('#buscador');
 const $filtroEstado    = $('#filtro-estado');
@@ -107,15 +109,17 @@ async function recargar() {
   try {
     clientesData = await listarClientes();
 
-    // Llenar el dropdown de zonas con las que existen
-    const zonas = [...new Set(clientesData.map(c => c.zona).filter(Boolean))].sort();
-    $filtroZona.innerHTML = '<option value="">Todas las zonas</option>' +
-      zonas.map(z => `<option value="${escapeHTML(z)}">${escapeHTML(z)}</option>`).join('');
+    // Combinar zonas guardadas (de los clientes) + zonas predefinidas (zonas.js)
+    const zonasClientes = clientesData.map(c => c.zona).filter(Boolean);
+    const zonasPredef   = ZONAS.map(z => z.nombre);
+    const todasZonas    = [...new Set([...zonasPredef, ...zonasClientes])].sort();
 
-    // También llenar el datalist del form
+    $filtroZona.innerHTML = '<option value="">Todas las zonas</option>' +
+      todasZonas.map(z => `<option value="${escapeHTML(z)}">${escapeHTML(z)}</option>`).join('');
+
     const $datalist = document.getElementById('zonas-existentes');
     if ($datalist) {
-      $datalist.innerHTML = zonas.map(z => `<option value="${escapeHTML(z)}">`).join('');
+      $datalist.innerHTML = todasZonas.map(z => `<option value="${escapeHTML(z)}">`).join('');
     }
 
     aplicarFiltros();
@@ -133,26 +137,18 @@ function aplicarFiltros() {
   const filtroZona = $filtroZona.value;
 
   clientesFiltrados = clientesData.filter(c => {
-    // Estado
-    if (filtroEst === "deudores" && !((c.saldoPendiente || 0) > 0)) return false;
-    if (filtroEst === "al-dia"   && ((c.saldoPendiente || 0) > 0 || c.estado === "inactivo")) return false;
+    if (filtroEst === "deudores"  && !((c.saldoPendiente || 0) > 0)) return false;
+    if (filtroEst === "al-dia"    && ((c.saldoPendiente || 0) > 0 || c.estado === "inactivo")) return false;
     if (filtroEst === "inactivos" && c.estado !== "inactivo") return false;
-    if (filtroEst === "todos" && c.estado === "inactivo") {
-      // En "todos" mostramos activos por default; los inactivos van en su tab
-      // (excepto si el usuario buscó por texto algo específico)
-      if (!texto) return false;
-    }
+    if (filtroEst === "todos" && c.estado === "inactivo" && !texto) return false;
 
-    // Zona
     if (filtroZona && c.zona !== filtroZona) return false;
 
-    // Texto: buscar en nombre, apellido, teléfono, dirección, zona, observaciones
     if (texto) {
       const blob = [c.nombre, c.apellido, c.telefono, c.direccion, c.zona, c.observaciones]
         .filter(Boolean).join(' ').toLowerCase();
       if (!blob.includes(texto)) return false;
     }
-
     return true;
   });
 
@@ -196,7 +192,6 @@ function renderLista() {
 
   $lista.innerHTML = clientesFiltrados.map(c => filaCliente(c)).join('');
 
-  // Wire-up de eventos de cada fila
   $$('.fila-cliente').forEach($fila => {
     const id = $fila.dataset.id;
     $fila.querySelector('.checkbox-fila')?.addEventListener('click', (e) => {
@@ -217,20 +212,16 @@ function filaCliente(c) {
   return `
     <div class="fila-cliente" data-id="${c.id}" style="display: flex; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--linea); gap: 14px; ${inactivo ? 'opacity: 0.55;' : ''}">
 
-      <!-- Checkbox -->
       <div class="checkbox-fila" style="cursor: pointer; padding: 4px;">
         <div style="width: 18px; height: 18px; border-radius: 4px; border: 2px solid ${checked ? 'var(--terracota)' : 'var(--gris-suave)'}; background: ${checked ? 'var(--terracota)' : 'transparent'}; display: flex; align-items: center; justify-content: center; transition: all 0.15s;">
           ${checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
         </div>
       </div>
 
-      <!-- Cuerpo clickeable (abre ficha) -->
       <div class="fila-cuerpo" style="flex: 1; display: flex; align-items: center; gap: 14px; cursor: pointer; min-width: 0;">
 
-        <!-- Avatar -->
         <div style="width: 40px; height: 40px; background: var(--rose-claro); color: var(--terracota); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 500; font-size: 14px; flex-shrink: 0;">${escapeHTML(inic)}</div>
 
-        <!-- Datos -->
         <div style="flex: 1; min-width: 0;">
           <div style="font-size: 14px; font-weight: 500; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             ${escapeHTML(nombre)}
@@ -246,16 +237,13 @@ function filaCliente(c) {
           </div>
         </div>
 
-        <!-- Saldo -->
         <div style="text-align: right; flex-shrink: 0;">
           ${debe ? `
             <div style="font-family: var(--font-serif); font-size: 18px; color: var(--estado-error); white-space: nowrap;">
               ${formatoMoneda(c.saldoPendiente, { compacto: true })}
             </div>
             <div style="font-size: 10px; color: var(--gris-suave); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px;">adeudado</div>
-          ` : `
-            <span class="badge badge-ok">Al día</span>
-          `}
+          ` : `<span class="badge badge-ok">Al día</span>`}
         </div>
       </div>
     </div>`;
@@ -268,29 +256,23 @@ function toggleSeleccion(id) {
   if (seleccionados.has(id)) seleccionados.delete(id);
   else seleccionados.add(id);
   actualizarBarraSeleccion();
-  // Re-renderizar solo esa fila no es trivial sin librería, mejor todo:
   renderLista();
 }
 
 function actualizarBarraSeleccion() {
   const n = seleccionados.size;
-  if (n === 0) {
-    $barraSeleccion.classList.add('oculto');
-  } else {
+  if (n === 0) $barraSeleccion.classList.add('oculto');
+  else {
     $barraSeleccion.classList.remove('oculto');
     $contSeleccion.textContent = `${n} ${n === 1 ? 'seleccionado' : 'seleccionados'}`;
   }
 }
 
 $btnSelAll.addEventListener('click', () => {
-  // Si ya están todos los visibles seleccionados, deseleccionar; sino, seleccionar todos los visibles
   const idsVisibles = clientesFiltrados.map(c => c.id);
   const todosYa = idsVisibles.every(id => seleccionados.has(id));
-  if (todosYa) {
-    idsVisibles.forEach(id => seleccionados.delete(id));
-  } else {
-    idsVisibles.forEach(id => seleccionados.add(id));
-  }
+  if (todosYa) idsVisibles.forEach(id => seleccionados.delete(id));
+  else idsVisibles.forEach(id => seleccionados.add(id));
   actualizarBarraSeleccion();
   renderLista();
 });
@@ -304,21 +286,83 @@ $btnQuitarSel.addEventListener('click', () => {
 // =====================================================================
 // MODAL ALTA / EDICIÓN
 // =====================================================================
-const $modalForm    = $('#modal-form');
-const $formCliente  = $('#form-cliente');
-const $tituloForm   = $('#titulo-form');
-const $btnGuardar   = $('#btn-guardar');
-const $formError    = $('#form-error');
+const $modalForm   = $('#modal-form');
+const $formCliente = $('#form-cliente');
+const $tituloForm  = $('#titulo-form');
+const $btnGuardar  = $('#btn-guardar');
+const $formError   = $('#form-error');
+const $botonesZonas = $('#botones-zonas');
+
+function renderBotonesZonas() {
+  // Botones de localidades + botón "Mi ubicación" al final
+  const htmlZonas = ZONAS.map(z => `
+    <button type="button" class="btn-zona" data-zona-id="${escapeHTML(z.id)}" title="Ir a ${escapeHTML(z.nombre)}">
+      📍 ${escapeHTML(z.nombre)}
+    </button>
+  `).join('');
+
+  const htmlGPS = `
+    <button type="button" class="btn-zona btn-zona-gps" id="btn-mi-ubicacion" title="Usar mi ubicación actual (GPS)">
+      🎯 Mi ubicación
+    </button>
+  `;
+
+  $botonesZonas.innerHTML = htmlZonas + htmlGPS;
+
+  // Wire-up
+  $botonesZonas.querySelectorAll('.btn-zona[data-zona-id]').forEach($btn => {
+    $btn.addEventListener('click', () => {
+      const zona = ZONAS.find(z => z.id === $btn.dataset.zonaId);
+      if (!zona || !mapaForm) return;
+      mapaForm.setView([zona.lat, zona.lng], zona.zoom, { animate: true });
+      // Si NO hay zona escrita en el form, sugerir esta
+      const $zonaInput = $('#f-zona');
+      if (!$zonaInput.value.trim()) {
+        $zonaInput.value = zona.nombre;
+      }
+      // Resaltar visualmente el botón activo
+      $botonesZonas.querySelectorAll('.btn-zona').forEach(b => b.classList.remove('activo'));
+      $btn.classList.add('activo');
+    });
+  });
+
+  $('#btn-mi-ubicacion').addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      toast('Tu navegador no soporta GPS.', 'warn');
+      return;
+    }
+    toast('Buscando tu ubicación…', 'info');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        if (mapaForm) {
+          mapaForm.setView([latitude, longitude], 17, { animate: true });
+        }
+        setMarkerForm(latitude, longitude);
+        $('#f-coords').value = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        toast('Ubicación encontrada.', 'ok');
+      },
+      (err) => {
+        const msgs = {
+          1: 'Permiso de ubicación denegado. Permitilo en el navegador y volvé a intentar.',
+          2: 'No se pudo obtener tu ubicación.',
+          3: 'Tardó demasiado. Probá de nuevo o usá un botón de zona.'
+        };
+        toast(msgs[err.code] || 'Error al obtener ubicación.', 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  });
+}
 
 function abrirModalForm(cliente = null) {
   modoEdicion = !!cliente;
   $tituloForm.textContent = modoEdicion ? "Editar cliente" : "Nuevo cliente";
   $formError.classList.add('oculto');
 
-  // Reset
   $formCliente.reset();
-  $('#cliente-id').value     = '';
-  $('#f-coords').value       = '';
+  $('#cliente-id').value = '';
+  $('#f-coords').value   = '';
 
   if (cliente) {
     $('#cliente-id').value      = cliente.id;
@@ -336,9 +380,10 @@ function abrirModalForm(cliente = null) {
   }
 
   $modalForm.classList.add('abierto');
-
-  // Inicializar mapa después de que se muestre (Leaflet necesita el div visible)
-  setTimeout(() => inicializarMapaForm(cliente), 100);
+  setTimeout(() => {
+    inicializarMapaForm(cliente);
+    renderBotonesZonas();
+  }, 100);
 }
 
 function cerrarModalForm() {
@@ -354,8 +399,10 @@ function inicializarMapaForm(cliente) {
   const $div = document.getElementById('mapa-form');
   if (!$div) return;
 
-  // Centro inicial: ubicación del cliente, sino Zapala (centro Patagonia)
-  let centroLat = -38.902, centroLng = -70.065, zoom = 13;
+  let centroLat = CENTRO_DEFAULT.lat;
+  let centroLng = CENTRO_DEFAULT.lng;
+  let zoom      = CENTRO_DEFAULT.zoom;
+
   if (cliente?.ubicacion) {
     centroLat = cliente.ubicacion.latitude  ?? cliente.ubicacion._lat;
     centroLng = cliente.ubicacion.longitude ?? cliente.ubicacion._long;
@@ -378,7 +425,6 @@ function inicializarMapaForm(cliente) {
     $('#f-coords').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   });
 
-  // Forzar refresh por si el mapa estaba oculto
   setTimeout(() => mapaForm?.invalidateSize(), 100);
 }
 
@@ -386,15 +432,13 @@ function setMarkerForm(lat, lng) {
   if (!mapaForm) return;
   if (markerForm) mapaForm.removeLayer(markerForm);
   markerForm = L.marker([lat, lng]).addTo(mapaForm);
-  mapaForm.setView([lat, lng], Math.max(mapaForm.getZoom(), 15));
 }
 
-// Aplicar coords pegadas manualmente
 $('#btn-usar-coords').addEventListener('click', () => {
   const valor = $('#f-coords').value.trim();
   const match = valor.match(/^(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)/);
   if (!match) {
-    toast('Formato inválido. Usá "lat, lng" (ej: -38.902, -70.065)', 'warn');
+    toast('Formato inválido. Usá "lat, lng" (ej: -38.879801, -71.185758)', 'warn');
     return;
   }
   const lat = parseFloat(match[1]);
@@ -404,6 +448,7 @@ $('#btn-usar-coords').addEventListener('click', () => {
     return;
   }
   setMarkerForm(lat, lng);
+  mapaForm?.setView([lat, lng], 16, { animate: true });
   $('#f-coords').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 });
 
@@ -415,22 +460,18 @@ $('#btn-borrar-coords').addEventListener('click', () => {
   }
 });
 
-// Cerradores del modal
 $('#cerrar-form').addEventListener('click', cerrarModalForm);
 $('#btn-cancelar').addEventListener('click', cerrarModalForm);
 $modalForm.addEventListener('click', (e) => {
   if (e.target === $modalForm) cerrarModalForm();
 });
 
-// Botón nuevo
 $btnNuevo.addEventListener('click', () => abrirModalForm(null));
 
-// Submit del formulario
 $formCliente.addEventListener('submit', async (e) => {
   e.preventDefault();
   $formError.classList.add('oculto');
 
-  // Recoger
   const id = $('#cliente-id').value;
   const datos = {
     nombre:        $('#f-nombre').value.trim(),
@@ -441,25 +482,18 @@ $formCliente.addEventListener('submit', async (e) => {
     observaciones: $('#f-observaciones').value.trim(),
   };
 
-  // Validaciones
   if (!datos.nombre)   return mostrarFormError("El nombre es obligatorio.");
   if (!datos.apellido) return mostrarFormError("El apellido es obligatorio.");
   if (datos.telefono && !esTelefonoArgentino(datos.telefono)) {
     return mostrarFormError("El teléfono no parece válido. Formato esperado: +54 9 299 555 1234 o similar.");
   }
 
-  // Normalizar teléfono si pasó la validación
-  if (datos.telefono) {
-    datos.telefono = normalizarTelefono(datos.telefono);
-  }
+  if (datos.telefono) datos.telefono = normalizarTelefono(datos.telefono);
 
-  // Ubicación
   const coordsStr = $('#f-coords').value.trim();
   if (coordsStr) {
     const m = coordsStr.match(/^(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)/);
-    if (m) {
-      datos.ubicacion = new GeoPoint(parseFloat(m[1]), parseFloat(m[2]));
-    }
+    if (m) datos.ubicacion = new GeoPoint(parseFloat(m[1]), parseFloat(m[2]));
   } else {
     datos.ubicacion = null;
   }
@@ -472,7 +506,7 @@ $formCliente.addEventListener('submit', async (e) => {
       await actualizarCliente(id, datos);
       toast('Cliente actualizado.', 'ok');
     } else {
-      const nuevoId = await crearCliente(datos);
+      await crearCliente(datos);
       toast('Cliente creado.', 'ok');
     }
     cerrarModalForm();
@@ -497,20 +531,12 @@ function mostrarFormError(msg) {
 const $modalFicha = $('#modal-ficha');
 
 async function abrirFicha(clienteId) {
-  // Buscar primero en cache local, sino traer fresco
   let cliente = clientesData.find(c => c.id === clienteId);
   if (!cliente) {
-    try {
-      cliente = await obtenerCliente(clienteId);
-    } catch (e) {
-      toast('No se pudo cargar el cliente.', 'error');
-      return;
-    }
+    try { cliente = await obtenerCliente(clienteId); }
+    catch (e) { toast('No se pudo cargar el cliente.', 'error'); return; }
   }
-  if (!cliente) {
-    toast('Cliente no encontrado.', 'warn');
-    return;
-  }
+  if (!cliente) { toast('Cliente no encontrado.', 'warn'); return; }
 
   const nombre = `${cliente.nombre || ''} ${cliente.apellido || ''}`.trim() || 'Sin nombre';
 
@@ -520,7 +546,6 @@ async function abrirFicha(clienteId) {
     ${cliente.fechaAlta ? ` · Alta ${escapeHTML(fechaRelativa(cliente.fechaAlta))}` : ''}
   `;
 
-  // KPIs
   const debe = (cliente.saldoPendiente || 0) > 0;
   const totalMoneda = (n) => {
     const { simbolo, valor } = formatoMonedaPartes(n);
@@ -546,7 +571,6 @@ async function abrirFicha(clienteId) {
     </div>
   `;
 
-  // Datos
   const tieneUbicacion = !!cliente.ubicacion;
   const lat = tieneUbicacion ? (cliente.ubicacion.latitude  ?? cliente.ubicacion._lat) : null;
   const lng = tieneUbicacion ? (cliente.ubicacion.longitude ?? cliente.ubicacion._long) : null;
@@ -572,7 +596,6 @@ async function abrirFicha(clienteId) {
     ` : ''}
   `;
 
-  // Mapa
   const $mapaCard = $('#ficha-mapa-card');
   if (tieneUbicacion) {
     $mapaCard.style.display = 'block';
@@ -580,14 +603,10 @@ async function abrirFicha(clienteId) {
 
     setTimeout(() => {
       const $div = document.getElementById('ficha-mapa');
-      if (mapaFicha) {
-        mapaFicha.remove();
-        mapaFicha = null;
-      }
+      if (mapaFicha) { mapaFicha.remove(); mapaFicha = null; }
       mapaFicha = L.map($div).setView([lat, lng], 16);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap',
-        maxZoom: 19
+        attribution: '© OpenStreetMap', maxZoom: 19
       }).addTo(mapaFicha);
       L.marker([lat, lng]).addTo(mapaFicha);
       setTimeout(() => mapaFicha?.invalidateSize(), 100);
@@ -596,7 +615,6 @@ async function abrirFicha(clienteId) {
     $mapaCard.style.display = 'none';
   }
 
-  // Botón "Dar de baja" / "Reactivar" según estado
   const $btnBaja = $('#ficha-baja');
   if (cliente.estado === "inactivo") {
     $btnBaja.textContent = "Reactivar";
@@ -613,11 +631,7 @@ async function abrirFicha(clienteId) {
 
 function cerrarFicha() {
   $modalFicha.classList.remove('abierto');
-  if (mapaFicha) {
-    mapaFicha.remove();
-    mapaFicha = null;
-  }
-  // Si entramos vía ?id=, limpiar la URL para evitar reabrirla en F5/refresh
+  if (mapaFicha) { mapaFicha.remove(); mapaFicha = null; }
   if (window.location.search) {
     history.replaceState(null, '', window.location.pathname);
   }
@@ -629,7 +643,6 @@ $modalFicha.addEventListener('click', (e) => {
   if (e.target === $modalFicha) cerrarFicha();
 });
 
-// Editar desde la ficha
 $('#ficha-editar').addEventListener('click', async (e) => {
   const id = e.currentTarget.dataset.id;
   const cliente = clientesData.find(c => c.id === id) || await obtenerCliente(id);
@@ -637,7 +650,6 @@ $('#ficha-editar').addEventListener('click', async (e) => {
   setTimeout(() => abrirModalForm(cliente), 200);
 });
 
-// Dar de baja / Reactivar
 $('#ficha-baja').addEventListener('click', async (e) => {
   const id = e.currentTarget.dataset.id;
   const accion = e.currentTarget.dataset.accion;
@@ -649,25 +661,18 @@ $('#ficha-baja').addEventListener('click', async (e) => {
       toast('Cliente dado de baja.', 'ok');
       cerrarFicha();
       await recargar();
-    } catch (err) {
-      toast('No se pudo dar de baja: ' + err.message, 'error');
-    }
-  } else if (accion === "reactivar") {
+    } catch (err) { toast('No se pudo dar de baja: ' + err.message, 'error'); }
+  } else {
     if (!confirm("¿Reactivar este cliente?")) return;
     try {
       await reactivarCliente(id);
       toast('Cliente reactivado.', 'ok');
       cerrarFicha();
       await recargar();
-    } catch (err) {
-      toast('No se pudo reactivar: ' + err.message, 'error');
-    }
+    } catch (err) { toast('No se pudo reactivar: ' + err.message, 'error'); }
   }
 });
 
-// =====================================================================
-// Cerrar modales con Escape
-// =====================================================================
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if ($modalForm.classList.contains('abierto')) cerrarModalForm();
@@ -675,23 +680,12 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// =====================================================================
-// Soporte para ?id=xxx desde dashboard (abrir ficha directo)
-// y ?filtro=deudores (preseleccionar filtro)
-// =====================================================================
+// Soporte para ?id= y ?filtro=
 const params = new URLSearchParams(window.location.search);
 const idQS    = params.get('id');
 const filtroQS = params.get('filtro');
+if (filtroQS) $filtroEstado.value = filtroQS;
 
-if (filtroQS) {
-  // Setear filtro y reaplicar después de cargar
-  $filtroEstado.value = filtroQS;
-}
-
-// Carga inicial
 await recargar();
+if (idQS) setTimeout(() => abrirFicha(idQS), 300);
 
-// Si vino con ?id=, abrir ficha
-if (idQS) {
-  setTimeout(() => abrirFicha(idQS), 300);
-}
