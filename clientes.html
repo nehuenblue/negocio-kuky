@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f8f1e9" />
+  <title>Emanuel Cosméticos · Clientes</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Leaflet para el mini-mapa de la ficha -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <link rel="icon" type="image/jpeg" href="assets/logo.jpg" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+
+<body>
+
+  <!-- Pantalla de carga -->
+  <div class="cargando-pantalla" id="pantalla-carga">
+    <div class="contenido">
+      <div class="spinner-grande"></div>
+      <div class="etiqueta">Cargando clientes</div>
+    </div>
+  </div>
+
+  <div class="app" id="app" style="display:none;">
+    <!-- Sidebar inyectado por layout.js -->
+    <div class="main-wrapper">
+      <main class="main">
+
+        <!-- Header -->
+        <div class="main-header">
+          <div>
+            <h1 class="titulo-display">Clientes<em>.</em></h1>
+            <p class="subtitulo mt-sm" id="resumen-clientes">Cargando…</p>
+          </div>
+          <div class="flex flex-gap-sm">
+            <button class="btn btn-primario" id="btn-nuevo">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Nuevo cliente
+            </button>
+          </div>
+        </div>
+
+        <!-- Aviso de errores -->
+        <div id="aviso-inicial"></div>
+
+        <!-- Filtros y buscador -->
+        <div class="card mb-md">
+          <div class="flex flex-gap-sm flex-wrap" style="align-items: center;">
+            <input
+              type="search"
+              class="input"
+              id="buscador"
+              placeholder="Buscar por nombre, apellido, teléfono o dirección…"
+              style="flex: 1; min-width: 240px;"
+            />
+            <select class="select" id="filtro-estado" style="min-width: 140px;">
+              <option value="todos" selected>Todos</option>
+              <option value="deudores">Con deuda</option>
+              <option value="al-dia">Al día</option>
+              <option value="inactivos">Inactivos</option>
+            </select>
+            <select class="select" id="filtro-zona" style="min-width: 140px;">
+              <option value="">Todas las zonas</option>
+            </select>
+            <button class="btn btn-fantasma btn-sm" id="btn-limpiar-filtros">Limpiar</button>
+          </div>
+        </div>
+
+        <!-- Barra de acciones múltiples (oculta hasta seleccionar al menos uno) -->
+        <div class="card mb-md oculto" id="barra-seleccion" style="background: var(--tinta); color: var(--crema-clara); border-color: var(--tinta);">
+          <div class="flex flex-between flex-gap-sm" style="align-items: center;">
+            <div>
+              <strong id="contador-seleccion">0 seleccionados</strong>
+              <span style="font-size: 12px; opacity: 0.8; margin-left: 8px;">de <span id="total-mostrados">0</span></span>
+            </div>
+            <div class="flex flex-gap-sm flex-wrap">
+              <button class="btn btn-secundario btn-sm" id="btn-seleccionar-todos">Seleccionar todos</button>
+              <button class="btn btn-fantasma btn-sm" id="btn-quitar-seleccion" style="color: var(--crema-clara);">Quitar selección</button>
+              <button class="btn btn-secundario btn-sm" disabled title="Disponible en F8">📄 PDF</button>
+              <button class="btn btn-secundario btn-sm" disabled title="Disponible en F8">📊 Excel</button>
+              <button class="btn btn-secundario btn-sm" disabled title="Disponible en F8">💬 WhatsApp</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lista de clientes -->
+        <div class="card" style="padding: 0;">
+          <div id="lista-clientes">
+            <div class="vacio">
+              <h3>Cargando…</h3>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: ALTA / EDICIÓN ===================== -->
+  <div class="modal-overlay" id="modal-form">
+    <div class="modal" style="max-width: 680px;">
+      <div class="flex flex-between mb-md">
+        <h2 class="titulo-card" id="titulo-form">Nuevo cliente</h2>
+        <button class="btn-icono btn-fantasma" id="cerrar-form" aria-label="Cerrar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <form id="form-cliente" novalidate>
+        <input type="hidden" id="cliente-id" />
+
+        <div class="grid-2">
+          <div class="campo">
+            <label for="f-nombre">Nombre *</label>
+            <input class="input" type="text" id="f-nombre" required maxlength="60" />
+          </div>
+          <div class="campo">
+            <label for="f-apellido">Apellido *</label>
+            <input class="input" type="text" id="f-apellido" required maxlength="60" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="campo">
+            <label for="f-telefono">Teléfono</label>
+            <input class="input" type="tel" id="f-telefono" placeholder="+54 9 299 555 1234" maxlength="30" />
+            <small class="color-gris" style="font-size: 11px;">Formato argentino. Se valida automáticamente.</small>
+          </div>
+          <div class="campo">
+            <label for="f-zona">Zona / Barrio</label>
+            <input class="input" type="text" id="f-zona" placeholder="Ej: Centro, Bº Norte…" maxlength="40" list="zonas-existentes" />
+            <datalist id="zonas-existentes"></datalist>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="f-direccion">Dirección</label>
+          <input class="input" type="text" id="f-direccion" placeholder="Calle y número" maxlength="120" />
+        </div>
+
+        <div class="campo">
+          <label>Ubicación en el mapa <span class="color-gris" style="font-weight: normal; text-transform: none; letter-spacing: 0;">(click en el mapa para marcar)</span></label>
+          <div id="mapa-form" style="height: 220px; border-radius: var(--radio-md); border: 1px solid var(--linea); overflow: hidden;"></div>
+          <div class="flex flex-gap-sm mt-sm" style="align-items: center;">
+            <input class="input" type="text" id="f-coords" placeholder="latitud, longitud (ej: -38.902, -70.065)" style="flex: 1; font-size: 12px; font-family: var(--font-mono);" />
+            <button type="button" class="btn btn-secundario btn-sm" id="btn-usar-coords">Aplicar</button>
+            <button type="button" class="btn btn-fantasma btn-sm" id="btn-borrar-coords">✕</button>
+          </div>
+          <small class="color-gris" style="font-size: 11px;">Podés pegar coordenadas desde Google Maps (formato "-38.902, -70.065") o tocar el mapa.</small>
+        </div>
+
+        <div class="campo">
+          <label for="f-observaciones">Observaciones</label>
+          <textarea class="textarea" id="f-observaciones" placeholder="Notas internas (no se comparten con el cliente)…" maxlength="500"></textarea>
+        </div>
+
+        <div id="form-error" class="alerta alerta-error oculto mb-md"></div>
+
+        <div class="flex flex-gap-sm" style="justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn btn-fantasma" id="btn-cancelar">Cancelar</button>
+          <button type="submit" class="btn btn-primario" id="btn-guardar">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: FICHA ===================== -->
+  <div class="modal-overlay" id="modal-ficha">
+    <div class="modal" style="max-width: 720px;">
+      <div class="flex flex-between mb-md">
+        <div>
+          <h2 class="titulo-card" id="ficha-nombre">—</h2>
+          <div class="subtitulo" id="ficha-meta">—</div>
+        </div>
+        <button class="btn-icono btn-fantasma" id="cerrar-ficha" aria-label="Cerrar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- KPIs del cliente -->
+      <div class="kpi-grid mb-md" id="ficha-kpis" style="grid-template-columns: repeat(3, 1fr);"></div>
+
+      <!-- Datos -->
+      <div class="card mb-md">
+        <div class="titulo-card mb-sm" style="font-size: 16px;">Datos de contacto</div>
+        <div id="ficha-datos" class="grid-2"></div>
+      </div>
+
+      <!-- Mapa -->
+      <div class="card mb-md" id="ficha-mapa-card" style="display: none;">
+        <div class="titulo-card mb-sm" style="font-size: 16px;">Ubicación</div>
+        <div id="ficha-mapa" style="height: 220px; border-radius: var(--radio-md); overflow: hidden;"></div>
+        <div class="flex flex-gap-sm mt-sm">
+          <a id="ficha-google-maps" target="_blank" class="btn btn-secundario btn-sm">Abrir en Google Maps</a>
+        </div>
+      </div>
+
+      <!-- Historial (placeholder hasta F4) -->
+      <div class="card mb-md">
+        <div class="titulo-card mb-sm" style="font-size: 16px;">Historial de compras y pagos</div>
+        <div class="vacio" style="padding: 24px;">
+          <p>El historial completo de compras y pagos estará disponible una vez que registres ventas en la Fase 4.</p>
+        </div>
+      </div>
+
+      <!-- Acciones -->
+      <div class="flex flex-gap-sm flex-wrap" style="justify-content: flex-end;">
+        <button class="btn btn-fantasma" id="ficha-baja">Dar de baja</button>
+        <button class="btn btn-secundario" id="ficha-editar">Editar</button>
+        <button class="btn btn-primario" id="ficha-cerrar-btn">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="js/pages/clientes.js"></script>
+</body>
+</html>
