@@ -66,6 +66,55 @@
       width: 100%;
       height: 100%;
       background: #e8e0d4;
+      z-index: 0;
+    }
+    /* CRÍTICO: proteger los transforms internos que Leaflet usa para
+       posicionar los tiles. Si algún CSS global pisa transform o
+       translate3d, los tiles quedan todos en (0,0). */
+    #mapa-container .leaflet-pane,
+    #mapa-container .leaflet-tile,
+    #mapa-container .leaflet-marker-icon,
+    #mapa-container .leaflet-marker-shadow,
+    #mapa-container .leaflet-tile-container,
+    #mapa-container .leaflet-pane > svg,
+    #mapa-container .leaflet-pane > canvas,
+    #mapa-container .leaflet-zoom-box,
+    #mapa-container .leaflet-image-layer,
+    #mapa-container .leaflet-layer {
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    #mapa-container .leaflet-container {
+      overflow: hidden;
+    }
+    #mapa-container .leaflet-tile,
+    #mapa-container .leaflet-marker-icon,
+    #mapa-container .leaflet-marker-shadow {
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    /* Asegurar que los tiles y controles de Leaflet estén visibles */
+    #mapa-container .leaflet-pane,
+    #mapa-container .leaflet-tile-pane,
+    #mapa-container .leaflet-tile-container,
+    #mapa-container .leaflet-tile,
+    #mapa-container .leaflet-layer {
+      z-index: auto !important;
+    }
+    #mapa-container .leaflet-tile {
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+    #mapa-container .leaflet-control-container {
+      z-index: 800;
+    }
+    /* Algunos resets defensivos para evitar conflictos con styles.css */
+    #mapa-container img {
+      max-width: none !important;
+      max-height: none !important;
+      width: auto;
+      height: auto;
     }
     @media (max-width: 900px) {
       html, body { overflow: auto; }
