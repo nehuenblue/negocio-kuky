@@ -513,13 +513,14 @@ export async function crearVenta(venta) {
     if (pagado > 0) {
       pagoRef = doc(collection(db, "pagos"));
       transaction.set(pagoRef, {
-        clienteId:   venta.clienteId,
-        ventaId:     ventaRef.id,
-        monto:       pagado,
-        formaPago:   venta.formaPago || "efectivo",
+        clienteId:     venta.clienteId,
+        clienteNombre: venta.clienteNombre || "",
+        ventaId:       ventaRef.id,
+        monto:         pagado,
+        formaPago:     venta.formaPago || "efectivo",
         observaciones: "Pago en el momento de la venta",
-        fecha:       serverTimestamp(),
-        creadoPor:   email,
+        fecha:         serverTimestamp(),
+        creadoPor:     email,
       });
     }
 
@@ -790,6 +791,7 @@ export async function registrarPago(datos) {
     // 1. Crear el pago
     transaction.set(pagoRef, {
       clienteId:     venta.clienteId,
+      clienteNombre: venta.clienteNombre || "",
       ventaId:       datos.ventaId,
       monto,
       formaPago:     datos.formaPago || "efectivo",
