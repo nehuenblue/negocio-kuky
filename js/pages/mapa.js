@@ -328,5 +328,12 @@ if (zonaQS) $filtroZona.value = zonaQS;
 
 await cargarDatos();
 
-// Forzar reajuste del mapa después de cargar (por si el contenedor cambió de tamaño)
-setTimeout(() => mapa?.invalidateSize(), 200);
+// Forzar varios reajustes del mapa para garantizar render en cualquier viewport
+setTimeout(() => mapa?.invalidateSize(), 100);
+setTimeout(() => mapa?.invalidateSize(), 500);
+setTimeout(() => mapa?.invalidateSize(), 1000);
+
+// También al cambiar el tamaño de ventana
+window.addEventListener('resize', () => {
+  mapa?.invalidateSize();
+});
