@@ -221,11 +221,23 @@ function cardProducto(p) {
   const precioOk   = (p.precio || 0) > 0;
   const claseCard  = `producto-card ${checked ? 'seleccionado' : ''} ${p.estado === 'revisar' ? 'revisar' : ''} ${p.estado === 'inactivo' ? 'inactivo' : ''}`;
 
+  // Foto o placeholder
+  const fotoHTML = p.imagen
+    ? `<div class="producto-foto"><img src="${p.imagen}" alt="${escapeHTML(p.nombre)}" loading="lazy"/></div>`
+    : `<div class="producto-foto">
+         <div class="placeholder">
+           <div class="ico-grande">📷</div>
+           <div class="cod-grande">${escapeHTML(p.id)}</div>
+         </div>
+       </div>`;
+
   return `
     <div class="${claseCard}" data-cod="${escapeHTML(p.id)}">
       <div class="check-card">
         ${checked ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
       </div>
+
+      ${fotoHTML}
 
       <div class="cod">${escapeHTML(p.id)}</div>
       <div class="nombre" title="${escapeHTML(p.nombre)}">${escapeHTML(p.nombre)}</div>
@@ -296,6 +308,11 @@ function filaTabla(p) {
   const stockCss = (p.stock || 0) === 0 ? 'color: var(--estado-error);' :
                    (p.stock <= 5) ? 'color: var(--estado-warn);' : '';
 
+  // Mini foto o placeholder
+  const miniFoto = p.imagen
+    ? `<img src="${p.imagen}" alt="" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; vertical-align: middle; margin-right: 10px;" loading="lazy" />`
+    : `<span style="display: inline-flex; width: 36px; height: 36px; background: var(--crema-oscura); color: var(--rose-profundo); border-radius: 6px; align-items: center; justify-content: center; font-size: 14px; vertical-align: middle; margin-right: 10px;">📷</span>`;
+
   return `
     <tr data-cod="${escapeHTML(p.id)}" class="${checked ? 'seleccionada' : ''}">
       <td class="check-cell">
@@ -304,7 +321,7 @@ function filaTabla(p) {
         </div>
       </td>
       <td><span class="mono">${escapeHTML(p.id)}</span></td>
-      <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHTML(p.nombre)}">${escapeHTML(p.nombre)}</td>
+      <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHTML(p.nombre)}">${miniFoto}${escapeHTML(p.nombre)}</td>
       <td style="font-size: 11px; color: var(--rose-profundo); letter-spacing: 0.05em; text-transform: uppercase;">${escapeHTML(p.categoria || '—')}</td>
       <td class="alinear-derecha">${precio}</td>
       <td class="alinear-derecha" style="${stockCss}">${typeof p.stock === 'number' ? p.stock : '—'}</td>
@@ -371,12 +388,155 @@ const $tituloForm = $('#titulo-form');
 const $btnGuardar = $('#btn-guardar');
 const $btnEliminar = $('#btn-eliminar');
 const $formError  = $('#form-error');
+const $fotoUploader = $('#foto-uploader');
+const $inputFoto    = $('#input-foto');
+
+// Estado de la foto actual en el modal (Base64 o null)
+let fotoActual = null;
+
+// =====================================================================
+// COMPRESIÓN DE IMAGEN
+// =====================================================================
+/**
+ * Lee un File, lo redimensiona y comprime, y devuelve Base64.
+ * Target: imagen cuadrada de máx 600x600 px, JPEG calidad 75, < 80 KB.
+ */
+async function comprimirImagen(file) {
+  // Validar tipo
+  if (!file.type.startsWith('image/')) {
+    throw new Error('El archivo debe ser una imagen.');
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error('La imagen es demasiado grande (máx 10 MB).');
+  }
+
+  // Cargar como Image
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+    reader.readAsDataURL(file);
+  });
+
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload  = () => resolve(i);
+    i.onerror = () => reject(new Error('Imagen inválida o corrupta.'));
+    i.src = dataUrl;
+  });
+
+  // Redimensionar a max 600px de lado largo, manteniendo aspecto
+  const MAX = 600;
+  let { width, height } = img;
+  if (width > height) {
+    if (width > MAX) { height = Math.round((MAX / width) * height); width = MAX; }
+  } else {
+    if (height > MAX) { width = Math.round((MAX / height) * width); height = MAX; }
+  }
+
+  // Dibujar en canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  // Fondo blanco (por si la imagen tiene transparencia y la guardamos como JPEG)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
+
+  // Exportar como JPEG con calidad variable hasta que pese < 100 KB
+  let calidad = 0.80;
+  let base64;
+  do {
+    base64 = canvas.toDataURL('image/jpeg', calidad);
+    // Estimar tamaño: cada char de base64 ≈ 0.75 bytes
+    const bytes = (base64.length * 3) / 4;
+    if (bytes < 100 * 1024) break;
+    calidad -= 0.10;
+  } while (calidad > 0.25);
+
+  return base64;
+}
+
+// =====================================================================
+// MANEJO DEL UPLOADER DE FOTO
+// =====================================================================
+function renderUploader() {
+  if (fotoActual) {
+    $fotoUploader.classList.add('con-foto');
+    $fotoUploader.innerHTML = `
+      <input type="file" id="input-foto" accept="image/*" capture="environment" style="display: none;" />
+      <div class="controles-foto">
+        <button type="button" id="btn-cambiar-foto" title="Cambiar foto">↻</button>
+        <button type="button" id="btn-eliminar-foto" title="Quitar foto">✕</button>
+      </div>
+      <img class="preview" src="${fotoActual}" alt="Foto del producto" />
+    `;
+
+    // Re-wire eventos
+    $('#input-foto').addEventListener('change', handleFotoSeleccionada);
+    $('#btn-cambiar-foto').addEventListener('click', (e) => {
+      e.stopPropagation();
+      $('#input-foto').click();
+    });
+    $('#btn-eliminar-foto').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm('¿Quitar la foto?')) {
+        fotoActual = null;
+        renderUploader();
+      }
+    });
+  } else {
+    $fotoUploader.classList.remove('con-foto');
+    $fotoUploader.innerHTML = `
+      <input type="file" id="input-foto" accept="image/*" capture="environment" style="display: none;" />
+      <div class="upload-icon">📷</div>
+      <div class="upload-text">Tocar para subir foto</div>
+      <div class="upload-hint">Cámara o galería · se comprime automáticamente</div>
+    `;
+    $('#input-foto').addEventListener('change', handleFotoSeleccionada);
+  }
+}
+
+$fotoUploader.addEventListener('click', (e) => {
+  // Solo abrir el selector si NO hay foto cargada (sino se manejan los botones internos)
+  if (!fotoActual && !e.target.closest('.controles-foto')) {
+    $('#input-foto').click();
+  }
+});
+
+async function handleFotoSeleccionada(e) {
+  const archivo = e.target.files?.[0];
+  if (!archivo) return;
+
+  $fotoUploader.classList.add('subiendo');
+  // Mostrar un loader rápido mientras se comprime
+  const htmlOriginal = $fotoUploader.innerHTML;
+  $fotoUploader.innerHTML = `
+    <div class="upload-icon">⏳</div>
+    <div class="upload-text">Procesando…</div>
+  `;
+
+  try {
+    const base64 = await comprimirImagen(archivo);
+    fotoActual = base64;
+    toast('Foto lista para guardar.', 'ok');
+    renderUploader();
+  } catch (err) {
+    console.error('[productos] error comprimiendo foto:', err);
+    toast('Error: ' + err.message, 'error');
+    $fotoUploader.innerHTML = htmlOriginal;
+  } finally {
+    $fotoUploader.classList.remove('subiendo');
+  }
+}
 
 async function abrirModalForm(codigo = null) {
   modoEdicion = !!codigo;
   $tituloForm.textContent = modoEdicion ? "Editar producto" : "Nuevo producto";
   $formError.classList.add('oculto');
   $formProd.reset();
+  fotoActual = null;
 
   if (modoEdicion) {
     const p = productosData.find(x => x.id === codigo) || await obtenerProducto(codigo);
@@ -392,6 +552,7 @@ async function abrirModalForm(codigo = null) {
     $('#f-stock').value          = p.stock ?? '';
     $('#f-estado').value         = p.estado || 'activo';
     $('#f-observaciones').value  = p.observaciones || '';
+    fotoActual                   = p.imagen || null;
     $btnEliminar.classList.remove('oculto');
     $btnEliminar.dataset.codigo  = p.id;
   } else {
@@ -400,6 +561,7 @@ async function abrirModalForm(codigo = null) {
     $btnEliminar.classList.add('oculto');
   }
 
+  renderUploader();
   actualizarGanancia();
   $modalForm.classList.add('abierto');
   setTimeout(() => $('#f-nombre').focus(), 100);
@@ -448,6 +610,7 @@ $formProd.addEventListener('submit', async (e) => {
     stock:         $('#f-stock').value,
     estado:        $('#f-estado').value,
     observaciones: $('#f-observaciones').value.trim(),
+    imagen:        fotoActual,
   };
 
   if (!datos.id)        return mostrarFormError("El código es obligatorio.");
