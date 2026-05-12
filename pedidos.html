@@ -254,11 +254,27 @@
         </div>
       </div>
 
-      <!-- Estados -->
+      <!-- Estados (display) -->
       <div class="flex flex-gap-sm flex-wrap mb-md">
         <span class="estado" id="det-estado-pago">—</span>
         <span class="estado" id="det-estado-pedido">—</span>
         <span class="badge badge-neutral" id="det-forma-pago">—</span>
+      </div>
+
+      <!-- Selector editable de estado del pedido -->
+      <div class="card mb-md" style="background: var(--crema-clara); padding: 12px 14px;">
+        <div class="etiqueta mb-sm">Cambiar estado del pedido</div>
+        <div class="flex flex-gap-sm" style="align-items: center;">
+          <select class="select" id="det-cambiar-estado" style="flex: 1;">
+            <option value="pendiente">Pendiente de entrega</option>
+            <option value="entregado">Entregado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+          <button class="btn btn-secundario btn-sm" id="det-aplicar-estado">Aplicar</button>
+        </div>
+        <small class="color-gris" style="font-size: 11px;">
+          Si seleccionás "Cancelado", se revierte el saldo del cliente.
+        </small>
       </div>
 
       <!-- Items -->
@@ -272,6 +288,12 @@
         <div class="fila principal"><span class="label">Saldo</span><span id="det-saldo">—</span></div>
       </div>
 
+      <!-- Historial de pagos -->
+      <div class="mt-md" id="det-pagos-bloque" style="display: none;">
+        <div class="etiqueta mb-sm">Historial de pagos</div>
+        <div id="det-pagos-lista" style="background: var(--crema-clara); border-radius: var(--radio-md); padding: 10px;"></div>
+      </div>
+
       <!-- Observaciones -->
       <div id="det-obs-bloque" class="mt-md" style="display: none;">
         <div class="etiqueta mb-sm">Observaciones</div>
@@ -280,8 +302,6 @@
 
       <!-- Acciones -->
       <div class="flex flex-gap-sm flex-wrap mt-lg" style="justify-content: flex-end;">
-        <button class="btn btn-fantasma" id="det-cancelar" style="color: var(--estado-error);">Cancelar pedido</button>
-        <button class="btn btn-secundario" id="det-entregar">Marcar entregado</button>
         <button class="btn btn-primario" id="det-pago" style="display: none;">+ Registrar pago</button>
       </div>
     </div>
