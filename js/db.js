@@ -169,6 +169,262 @@ export async function listarCategorias() {
 }
 
 // =====================================================================
+//  IMPORTADOR DE CATÁLOGO
+// ---------------------------------------------------------------------
+// Compara catálogo nuevo (JSON entrante) contra catálogo en Firestore
+// y genera un "diff" para vista previa antes de aplicar.
+// =====================================================================
+
+/**
+ * Calcula el diff entre el catálogo actual en Firestore y un catálogo
+ * nuevo entrante.
+ *
+ * @param {Array} catalogoNuevo Array de productos del JSON nuevo
+ * @returns {Promise<Object>} Diff con clasificación
+ */
+export async function calcularDiffCatalogo(catalogoNuevo) {
+  if (!Array.isArray(catalogoNuevo) || catalogoNuevo.length === 0) {
+    throw new Error("El catálogo nuevo está vacío o no es un array.");
+  }
+
+  // Validar campos mínimos del primer producto (para detectar JSON mal formado)
+  const muestra = catalogoNuevo[0];
+  if (!muestra.id && !muestra.codigo) {
+    throw new Error("El JSON no tiene el campo 'id' o 'codigo'. Verificá el formato.");
+  }
+  if (typeof muestra.nombre !== "string") {
+    throw new Error("El JSON no tiene el campo 'nombre' como texto. Verificá el formato.");
+  }
+
+  // Normalizar el catálogo nuevo (usar id como key)
+  const nuevoPorId = {};
+  for (const p of catalogoNuevo) {
+    const id = String(p.id || p.codigo || "").trim();
+    if (!id) continue;
+    nuevoPorId[id] = {
+      id,
+      nombre:        (p.nombre || "").trim(),
+      categoria:     (p.categoria || "Otros").trim(),
+      precio:        Number(p.precio) || 0,
+      costo:         Number(p.costo) || 0,
+      puntos:        Number(p.puntos) || 0,
+      stock:         typeof p.stock === "number" ? p.stock : 0,
+      observaciones: (p.observaciones || "").trim(),
+      estado:        p.estado || "activo",
+      ciclo:         (p.ciclo || "").trim(),
+    };
+  }
+
+  // Cargar catálogo actual de Firestore
+  const actual = await listarProductos();
+  const actualPorId = {};
+  for (const p of actual) {
+    actualPorId[p.id] = p;
+  }
+
+  // Clasificar
+  const nuevos       = [];     // están en nuevo pero NO en actual
+  const cambiados    = [];     // están en ambos PERO con datos diferentes
+  const sinCambios   = [];     // están en ambos con mismos datos
+  const discontinuados = [];   // están en actual pero NO en nuevo
+
+  for (const idNuevo in nuevoPorId) {
+    const np = nuevoPorId[idNuevo];
+    const ap = actualPorId[idNuevo];
+
+    if (!ap) {
+      nuevos.push(np);
+    } else {
+      // Detectar si cambió algo relevante
+      const precioCambio   = (ap.precio || 0) !== np.precio;
+      const nombreCambio   = (ap.nombre || "") !== np.nombre;
+      const categoriaCambio = (ap.categoria || "") !== np.categoria;
+      const puntosCambio   = (ap.puntos || 0) !== np.puntos;
+
+      if (precioCambio || nombreCambio || categoriaCambio || puntosCambio) {
+        cambiados.push({
+          ...np,
+          // Guardamos los valores anteriores para mostrar en el diff
+          _anterior: {
+            precio:    ap.precio || 0,
+            nombre:    ap.nombre || "",
+            categoria: ap.categoria || "",
+            puntos:    ap.puntos || 0,
+          },
+          _delta: {
+            precio:     np.precio - (ap.precio || 0),
+            precioPct:  (ap.precio || 0) > 0 ? ((np.precio - ap.precio) / ap.precio) * 100 : 0,
+          }
+        });
+      } else {
+        sinCambios.push(np);
+      }
+    }
+  }
+
+  // Buscar discontinuados (en actual pero no en nuevo)
+  for (const idActual in actualPorId) {
+    if (!nuevoPorId[idActual]) {
+      const ap = actualPorId[idActual];
+      // Si ya estaba inactivo, no contamos
+      if (ap.estado === "inactivo") continue;
+      discontinuados.push(ap);
+    }
+  }
+
+  // Top cambios de precio (mayores aumentos y mayores bajas)
+  const conCambioPrecio = cambiados.filter(p => p._delta.precio !== 0);
+  const topAumentos = [...conCambioPrecio]
+    .sort((a, b) => b._delta.precioPct - a._delta.precioPct)
+    .slice(0, 10);
+  const topBajas = [...conCambioPrecio]
+    .sort((a, b) => a._delta.precioPct - b._delta.precioPct)
+    .filter(p => p._delta.precio < 0)
+    .slice(0, 5);
+
+  return {
+    resumen: {
+      totalNuevo:        Object.keys(nuevoPorId).length,
+      nuevos:            nuevos.length,
+      cambiados:         cambiados.length,
+      sinCambios:        sinCambios.length,
+      discontinuados:    discontinuados.length,
+      conCambioPrecio:   conCambioPrecio.length,
+    },
+    nuevos,
+    cambiados,
+    sinCambios,
+    discontinuados,
+    topAumentos,
+    topBajas,
+  };
+}
+
+/**
+ * Aplica el diff calculado: actualiza, crea, inactiva en batches.
+ *
+ * @param {Object} diff Resultado de calcularDiffCatalogo()
+ * @param {string} cicloNuevo Ej: "C08"
+ * @param {Function} onProgreso Callback opcional (cargados, total)
+ * @returns {Promise<Object>} Reporte de la operación
+ */
+export async function aplicarDiffCatalogo(diff, cicloNuevo, onProgreso) {
+  if (!cicloNuevo || typeof cicloNuevo !== "string") {
+    throw new Error("Especificá un ciclo nuevo (ej: 'C08').");
+  }
+  cicloNuevo = cicloNuevo.trim().toUpperCase();
+
+  const email = auth.currentUser?.email || "desconocido";
+  const ts = serverTimestamp();
+  const TAMANO_LOTE = 500;
+
+  // Construir todas las operaciones
+  const operaciones = [];
+
+  // 1. Crear los nuevos
+  for (const p of diff.nuevos) {
+    operaciones.push({
+      tipo: "set",
+      codigo: p.id,
+      datos: {
+        ...p,
+        ciclo:       cicloNuevo,
+        cicloAlta:   cicloNuevo,
+        creadoEn:    ts,
+        creadoPor:   email,
+      }
+    });
+  }
+
+  // 2. Actualizar los cambiados
+  for (const p of diff.cambiados) {
+    operaciones.push({
+      tipo: "update",
+      codigo: p.id,
+      datos: {
+        nombre:    p.nombre,
+        categoria: p.categoria,
+        precio:    p.precio,
+        puntos:    p.puntos,
+        ciclo:     cicloNuevo,
+        actualizadoEn:  ts,
+        actualizadoPor: email,
+      }
+    });
+  }
+
+  // 3. Inactivar los discontinuados (NO se borran, solo se marcan)
+  for (const p of diff.discontinuados) {
+    operaciones.push({
+      tipo: "update",
+      codigo: p.id,
+      datos: {
+        estado:           "inactivo",
+        descontinuadoEn:  cicloNuevo,
+        actualizadoEn:    ts,
+        actualizadoPor:   email,
+      }
+    });
+  }
+
+  // 4. Actualizar ciclo en los que están sin cambios (para que también pasen al ciclo nuevo)
+  for (const p of diff.sinCambios) {
+    operaciones.push({
+      tipo: "update",
+      codigo: p.id,
+      datos: {
+        ciclo:          cicloNuevo,
+        actualizadoEn:  ts,
+        actualizadoPor: email,
+      }
+    });
+  }
+
+  // Ejecutar en batches
+  const total = operaciones.length;
+  let procesados = 0;
+  let errores = [];
+
+  for (let i = 0; i < operaciones.length; i += TAMANO_LOTE) {
+    const lote = operaciones.slice(i, i + TAMANO_LOTE);
+    const batch = writeBatch(db);
+
+    for (const op of lote) {
+      const ref = doc(db, "productos", op.codigo);
+      if (op.tipo === "set") batch.set(ref, op.datos);
+      else if (op.tipo === "update") batch.update(ref, op.datos);
+    }
+
+    try {
+      await batch.commit();
+      procesados += lote.length;
+      if (onProgreso) onProgreso(procesados, total);
+    } catch (err) {
+      errores.push({ lote: i / TAMANO_LOTE + 1, error: err.message });
+    }
+  }
+
+  // Guardar registro de la importación
+  try {
+    await addDoc(collection(db, "configuracion", "importaciones-catalogo".split(":")[0], "log"), {
+      fecha:      ts,
+      por:        email,
+      cicloViejo: diff.nuevos.length > 0 ? "varios" : "",
+      cicloNuevo,
+      resumen:    diff.resumen,
+    }).catch(() => {});  // No bloqueante si falla
+  } catch (e) { /* no crítico */ }
+
+  return {
+    procesados,
+    total,
+    errores,
+    cicloNuevo,
+    timestamp: new Date(),
+  };
+}
+
+// =====================================================================
 //  CLIENTES
 // =====================================================================
 
