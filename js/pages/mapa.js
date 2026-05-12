@@ -50,6 +50,17 @@ const $botonesZonas = $('#botones-zonas-mapa');
 // INIT MAPA LEAFLET
 // =====================================================================
 function inicializarMapa() {
+  // Verificar que Leaflet esté cargado
+  if (typeof L === 'undefined') {
+    document.getElementById('mapa-container').innerHTML = `
+      <div style="padding: 40px; text-align: center; color: var(--estado-error);">
+        <p><strong>No se pudo cargar la librería del mapa.</strong></p>
+        <p style="font-size: 13px; margin-top: 10px;">Revisá tu conexión y recargá la página (Ctrl+Shift+R).</p>
+      </div>
+    `;
+    throw new Error('Leaflet no está disponible');
+  }
+
   mapa = L.map('mapa-container').setView(
     [CENTRO_DEFAULT.lat, CENTRO_DEFAULT.lng],
     CENTRO_DEFAULT.zoom
@@ -60,12 +71,17 @@ function inicializarMapa() {
     maxZoom: 19,
   }).addTo(mapa);
 
-  // Cluster
-  cluster = L.markerClusterGroup({
-    showCoverageOnHover: false,
-    maxClusterRadius: 50,
-    spiderfyOnMaxZoom: true,
-  });
+  // Cluster (opcional: si la librería no cargó, usamos un FeatureGroup normal)
+  if (typeof L.markerClusterGroup === 'function') {
+    cluster = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+    });
+  } else {
+    console.warn('[mapa] markercluster no disponible, usando FeatureGroup simple');
+    cluster = L.featureGroup();
+  }
   mapa.addLayer(cluster);
 }
 
@@ -311,3 +327,6 @@ const zonaQS = params.get('zona');
 if (zonaQS) $filtroZona.value = zonaQS;
 
 await cargarDatos();
+
+// Forzar reajuste del mapa después de cargar (por si el contenedor cambió de tamaño)
+setTimeout(() => mapa?.invalidateSize(), 200);
