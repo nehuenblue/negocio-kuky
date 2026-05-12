@@ -762,5 +762,14 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// =====================================================================
+// SOPORTE PARA DEEP-LINK ?estado=xxx
+// =====================================================================
+const params = new URLSearchParams(location.search);
+const estadoQS = params.get('estado');
+if (estadoQS && ['activo', 'revisar', 'inactivo'].includes(estadoQS)) {
+  $filtroEstado.value = estadoQS;
+}
+
 // Carga inicial
 await recargar();
