@@ -426,6 +426,177 @@ export async function aplicarDiffCatalogo(diff, cicloNuevo, onProgreso) {
 }
 
 // =====================================================================
+//  VENTAS
+// =====================================================================
+
+/**
+ * Crea una venta nueva con sus items, registra el pago inicial (si hay),
+ * y actualiza los contadores del cliente. Todo en una transacción atómica.
+ *
+ * @param {Object} venta
+ * @param {string} venta.clienteId      ID del cliente
+ * @param {string} venta.clienteNombre  Nombre completo (denormalizado)
+ * @param {Array}  venta.items          [{codigo, nombre, categoria, cantidad, precioUnit, subtotal}]
+ * @param {number} venta.total          Total de la venta
+ * @param {number} venta.pagado         Monto pagado en el momento de la venta
+ * @param {string} venta.formaPago      'efectivo' | 'transferencia' | 'mercadopago' | 'otro'
+ * @param {string} venta.estadoPedido   'pendiente' | 'entregado'
+ * @param {string} venta.observaciones
+ * @param {Date}   venta.fechaEntrega   Opcional
+ * @returns {Promise<string>} ID de la venta creada
+ */
+export async function crearVenta(venta) {
+  // Validaciones
+  if (!venta.clienteId)                 throw new Error("Falta el cliente.");
+  if (!Array.isArray(venta.items))      throw new Error("Items inválidos.");
+  if (venta.items.length === 0)         throw new Error("Agregá al menos un producto.");
+  if (typeof venta.total !== "number" || venta.total <= 0) throw new Error("El total debe ser mayor a 0.");
+  const pagado = Number(venta.pagado) || 0;
+  if (pagado < 0)                       throw new Error("El monto pagado no puede ser negativo.");
+  if (pagado > venta.total)             throw new Error("El monto pagado no puede ser mayor al total.");
+
+  const saldo = venta.total - pagado;
+  const email = auth.currentUser?.email || "desconocido";
+
+  // Determinar estado de pago
+  let estadoPago;
+  if (saldo === 0)        estadoPago = "pagado";
+  else if (pagado === 0)  estadoPago = "debe";
+  else                    estadoPago = "parcial";
+
+  const estadoPedido = venta.estadoPedido || "pendiente";
+
+  // Documento de venta
+  const ventaDoc = {
+    clienteId:      venta.clienteId,
+    clienteNombre:  venta.clienteNombre || "",
+    items:          venta.items.map(it => ({
+      codigo:     String(it.codigo || ""),
+      nombre:     String(it.nombre || ""),
+      categoria:  String(it.categoria || ""),
+      cantidad:   Number(it.cantidad) || 1,
+      precioUnit: Number(it.precioUnit) || 0,
+      subtotal:   Number(it.subtotal) || 0,
+    })),
+    total:          Number(venta.total),
+    pagado:         pagado,
+    saldo:          saldo,
+    estadoPedido,
+    estadoPago,
+    formaPago:      venta.formaPago || "efectivo",
+    observaciones:  (venta.observaciones || "").trim(),
+    fechaVenta:     serverTimestamp(),
+    fechaEntrega:   venta.fechaEntrega
+                      ? Timestamp.fromDate(aDate(venta.fechaEntrega))
+                      : null,
+    ubicacion:      venta.ubicacion || null,
+    creadoPor:      email,
+  };
+
+  // Transacción: crear venta + crear pago (si hubo) + actualizar cliente
+  const ventaRef = doc(collection(db, "ventas"));
+  const clienteRef = doc(db, "clientes", venta.clienteId);
+  let pagoRef = null;
+
+  await runTransaction(db, async (transaction) => {
+    // Leer cliente (necesario antes de cualquier write en transacción)
+    const clienteSnap = await transaction.get(clienteRef);
+    if (!clienteSnap.exists()) {
+      throw new Error("El cliente no existe o fue eliminado.");
+    }
+    const cliente = clienteSnap.data();
+
+    // 1. Crear la venta
+    transaction.set(ventaRef, ventaDoc);
+
+    // 2. Si hubo pago inicial, crear el documento de pago
+    if (pagado > 0) {
+      pagoRef = doc(collection(db, "pagos"));
+      transaction.set(pagoRef, {
+        clienteId:   venta.clienteId,
+        ventaId:     ventaRef.id,
+        monto:       pagado,
+        formaPago:   venta.formaPago || "efectivo",
+        observaciones: "Pago en el momento de la venta",
+        fecha:       serverTimestamp(),
+        creadoPor:   email,
+      });
+    }
+
+    // 3. Actualizar contadores del cliente (denormalización)
+    transaction.update(clienteRef, {
+      totalComprado:   (cliente.totalComprado || 0) + venta.total,
+      totalPagado:     (cliente.totalPagado || 0) + pagado,
+      saldoPendiente:  (cliente.saldoPendiente || 0) + saldo,
+      cantidadCompras: (cliente.cantidadCompras || 0) + 1,
+      ultimaCompra:    serverTimestamp(),
+      actualizadoEn:   serverTimestamp(),
+    });
+  });
+
+  return ventaRef.id;
+}
+
+/**
+ * Obtiene una venta por su ID.
+ */
+export async function obtenerVenta(ventaId) {
+  const snap = await getDoc(doc(db, "ventas", ventaId));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+/**
+ * Cambia el estado de un pedido (pendiente, entregado, cancelado).
+ * Solo modifica campos permitidos por las reglas de Firestore.
+ */
+export async function cambiarEstadoPedido(ventaId, nuevoEstado, observaciones = null) {
+  const estadosValidos = ["pendiente", "entregado", "cancelado"];
+  if (!estadosValidos.includes(nuevoEstado)) {
+    throw new Error(`Estado inválido: ${nuevoEstado}`);
+  }
+
+  const cambios = {
+    estadoPedido:   nuevoEstado,
+    actualizadoEn:  serverTimestamp(),
+  };
+  if (nuevoEstado === "entregado") {
+    cambios.fechaEntrega = serverTimestamp();
+  }
+  if (observaciones !== null) {
+    cambios.observaciones = observaciones;
+  }
+
+  // Si se cancela, hay que revertir los contadores del cliente
+  if (nuevoEstado === "cancelado") {
+    const ventaSnap = await getDoc(doc(db, "ventas", ventaId));
+    if (!ventaSnap.exists()) throw new Error("La venta no existe.");
+    const venta = ventaSnap.data();
+    if (venta.estadoPedido === "cancelado") return; // ya estaba cancelada
+
+    const clienteRef = doc(db, "clientes", venta.clienteId);
+
+    await runTransaction(db, async (transaction) => {
+      const clienteSnap = await transaction.get(clienteRef);
+      if (clienteSnap.exists()) {
+        const cliente = clienteSnap.data();
+        transaction.update(clienteRef, {
+          totalComprado:   Math.max(0, (cliente.totalComprado || 0) - (venta.total || 0)),
+          totalPagado:     Math.max(0, (cliente.totalPagado || 0) - (venta.pagado || 0)),
+          saldoPendiente:  Math.max(0, (cliente.saldoPendiente || 0) - (venta.saldo || 0)),
+          cantidadCompras: Math.max(0, (cliente.cantidadCompras || 0) - 1),
+          actualizadoEn:   serverTimestamp(),
+        });
+      }
+      transaction.update(doc(db, "ventas", ventaId), cambios);
+    });
+    return;
+  }
+
+  // Para otros estados, update simple
+  await updateDoc(doc(db, "ventas", ventaId), cambios);
+}
+
+// =====================================================================
 //  CLIENTES
 // =====================================================================
 
@@ -714,3 +885,4 @@ export {
   collection, doc, getDoc, getDocs, query, where, orderBy, limit, startAfter,
   addDoc, setDoc, updateDoc, deleteDoc, writeBatch, runTransaction
 };
+
