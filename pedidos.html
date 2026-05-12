@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f8f1e9" />
+  <title>Emanuel Cosméticos · Pedidos</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="icon" type="image/jpeg" href="assets/logo.jpg" />
+  <link rel="stylesheet" href="assets/styles.css" />
+
+  <style>
+    /* Tabla de pedidos */
+    .tabla-pedidos td {
+      vertical-align: middle;
+      padding: 12px 14px;
+    }
+    .tabla-pedidos tbody tr {
+      cursor: pointer;
+      transition: background var(--t-rapida);
+    }
+    .tabla-pedidos tbody tr:hover { background: var(--crema-oscura); }
+    .tabla-pedidos .cliente-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .tabla-pedidos .avatar-tabla {
+      width: 32px; height: 32px;
+      background: var(--rose-claro);
+      color: var(--terracota);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    /* Detalle items del pedido (modal) */
+    .detalle-items {
+      background: var(--crema-clara);
+      border-radius: var(--radio-md);
+      padding: var(--gap-sm);
+      margin-bottom: var(--gap-md);
+    }
+    .detalle-item {
+      display: grid;
+      grid-template-columns: 40px 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--linea);
+      font-size: 13px;
+    }
+    .detalle-item:last-child { border-bottom: none; }
+    .detalle-item .foto-d {
+      width: 40px; height: 40px;
+      background: var(--crema-oscura);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .detalle-item .foto-d img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .detalle-item .foto-d .ph { font-size: 14px; opacity: 0.4; }
+    .detalle-item .nom-d {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+      color: var(--tinta);
+    }
+    .detalle-item .cod-d {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--gris-suave);
+    }
+    .detalle-item .cant-d {
+      font-size: 12px;
+      color: var(--gris-suave);
+      white-space: nowrap;
+    }
+    .detalle-item .sub-d {
+      font-family: var(--font-serif);
+      font-size: 14px;
+      color: var(--tinta);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    /* Totales en el detalle */
+    .totales-detalle {
+      background: var(--crema-oscura);
+      border-radius: var(--radio-md);
+      padding: var(--gap-sm);
+    }
+    .totales-detalle .fila {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 14px;
+    }
+    .totales-detalle .fila.principal {
+      font-family: var(--font-serif);
+      font-size: 20px;
+      color: var(--tinta);
+      font-weight: 500;
+      padding-top: 8px;
+      margin-top: 4px;
+      border-top: 1px solid var(--linea);
+    }
+    .totales-detalle .label {
+      color: var(--terracota);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Modal de pago parcial */
+    .modal-pago .totales-mini {
+      background: var(--crema-oscura);
+      padding: 12px;
+      border-radius: var(--radio-md);
+      margin-bottom: var(--gap-md);
+    }
+    .modal-pago .totales-mini > div {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      font-size: 13px;
+    }
+    .modal-pago .totales-mini .saldo-grande {
+      font-family: var(--font-serif);
+      font-size: 18px;
+      color: var(--estado-error);
+      font-weight: 500;
+      padding-top: 6px;
+      margin-top: 4px;
+      border-top: 1px solid var(--linea);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="cargando-pantalla" id="pantalla-carga">
+    <div class="contenido">
+      <div class="spinner-grande"></div>
+      <div class="etiqueta">Cargando pedidos</div>
+    </div>
+  </div>
+
+  <div class="app" id="app" style="display:none;">
+    <div class="main-wrapper">
+      <main class="main">
+
+        <div class="main-header">
+          <div>
+            <h1 class="titulo-display">Pedidos<em>.</em></h1>
+            <p class="subtitulo mt-sm" id="resumen-pedidos">Cargando…</p>
+          </div>
+          <div class="flex flex-gap-sm">
+            <a class="btn btn-primario" href="ventas.html">+ Nueva venta</a>
+          </div>
+        </div>
+
+        <div id="aviso-inicial"></div>
+
+        <!-- Filtros -->
+        <div class="card mb-md">
+          <div class="flex flex-gap-sm flex-wrap" style="align-items: center;">
+            <input
+              type="search"
+              class="input"
+              id="buscador"
+              placeholder="Buscar por cliente o producto…"
+              style="flex: 1; min-width: 220px;"
+            />
+            <select class="select" id="filtro-estado-pago" style="min-width: 150px;">
+              <option value="">Todos los pagos</option>
+              <option value="pagado">Pagados</option>
+              <option value="parcial">Pagos parciales</option>
+              <option value="debe">Con deuda</option>
+            </select>
+            <select class="select" id="filtro-estado-pedido" style="min-width: 170px;">
+              <option value="">Todos los pedidos</option>
+              <option value="pendiente">Pendientes</option>
+              <option value="entregado">Entregados</option>
+              <option value="cancelado">Cancelados</option>
+            </select>
+            <select class="select" id="filtro-rango" style="min-width: 150px;">
+              <option value="">Todas las fechas</option>
+              <option value="hoy">Hoy</option>
+              <option value="ayer">Ayer</option>
+              <option value="estaSemana">Esta semana</option>
+              <option value="esteMes">Este mes</option>
+              <option value="ultimos30Dias">Últimos 30 días</option>
+            </select>
+            <button class="btn btn-fantasma btn-sm" id="btn-limpiar">Limpiar</button>
+          </div>
+        </div>
+
+        <!-- Listado -->
+        <div class="tabla-wrapper">
+          <table class="tabla tabla-pedidos">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th class="alinear-derecha">Total</th>
+                <th class="alinear-derecha">Pagado</th>
+                <th class="alinear-derecha">Saldo</th>
+                <th class="alinear-centro">Pago</th>
+                <th class="alinear-centro">Pedido</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-pedidos">
+              <tr><td colspan="7"><div class="vacio"><p>Cargando…</p></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: DETALLE DEL PEDIDO ===================== -->
+  <div class="modal-overlay" id="modal-detalle">
+    <div class="modal" style="max-width: 680px;">
+      <div class="flex flex-between mb-md">
+        <div>
+          <h2 class="titulo-card" id="det-titulo">Pedido</h2>
+          <div class="subtitulo" id="det-meta">—</div>
+        </div>
+        <button class="btn-icono btn-fantasma" id="cerrar-detalle" aria-label="Cerrar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Cliente -->
+      <div class="card mb-md" style="background: var(--crema-clara); padding: 12px 14px;">
+        <div class="flex flex-between flex-gap-sm" style="align-items: center;">
+          <div class="flex flex-gap-sm" style="align-items: center;">
+            <div id="det-cliente-avatar" style="width:36px; height:36px; background:var(--rose-palo); color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:500; font-size:13px;">—</div>
+            <div>
+              <div id="det-cliente-nombre" style="font-size:14px; font-weight:500; color:var(--tinta);">—</div>
+              <div id="det-cliente-meta" style="font-size:11px; color:var(--gris-suave);">—</div>
+            </div>
+          </div>
+          <a class="btn btn-fantasma btn-sm" id="det-ver-ficha" style="font-size: 11px;">Ver ficha</a>
+        </div>
+      </div>
+
+      <!-- Estados -->
+      <div class="flex flex-gap-sm flex-wrap mb-md">
+        <span class="estado" id="det-estado-pago">—</span>
+        <span class="estado" id="det-estado-pedido">—</span>
+        <span class="badge badge-neutral" id="det-forma-pago">—</span>
+      </div>
+
+      <!-- Items -->
+      <div class="etiqueta mb-sm">Productos</div>
+      <div class="detalle-items" id="det-items"></div>
+
+      <!-- Totales -->
+      <div class="totales-detalle">
+        <div class="fila"><span class="label">Subtotal</span><span id="det-subtotal">—</span></div>
+        <div class="fila"><span class="label">Pagado</span><span id="det-pagado" style="color: var(--estado-ok);">—</span></div>
+        <div class="fila principal"><span class="label">Saldo</span><span id="det-saldo">—</span></div>
+      </div>
+
+      <!-- Observaciones -->
+      <div id="det-obs-bloque" class="mt-md" style="display: none;">
+        <div class="etiqueta mb-sm">Observaciones</div>
+        <div id="det-obs" style="padding: 10px 14px; background: var(--crema-oscura); border-radius: var(--radio-md); font-size: 13px; line-height: 1.5;"></div>
+      </div>
+
+      <!-- Acciones -->
+      <div class="flex flex-gap-sm flex-wrap mt-lg" style="justify-content: flex-end;">
+        <button class="btn btn-fantasma" id="det-cancelar" style="color: var(--estado-error);">Cancelar pedido</button>
+        <button class="btn btn-secundario" id="det-entregar">Marcar entregado</button>
+        <button class="btn btn-primario" id="det-pago" style="display: none;">+ Registrar pago</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: REGISTRAR PAGO PARCIAL ===================== -->
+  <div class="modal-overlay" id="modal-pago">
+    <div class="modal modal-pago" style="max-width: 460px;">
+      <div class="flex flex-between mb-md">
+        <h2 class="titulo-card">Registrar pago</h2>
+        <button class="btn-icono btn-fantasma" id="cerrar-pago" aria-label="Cerrar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="totales-mini">
+        <div><span style="color:var(--terracota); font-size:12px;">Total venta</span><span id="pago-total">—</span></div>
+        <div><span style="color:var(--terracota); font-size:12px;">Ya pagado</span><span id="pago-pagado">—</span></div>
+        <div class="saldo-grande"><span>Saldo</span><span id="pago-saldo">—</span></div>
+      </div>
+
+      <div class="campo">
+        <label for="pago-monto">Monto a registrar</label>
+        <input class="input" type="number" id="pago-monto" min="1" step="1" placeholder="0" autofocus />
+        <small class="color-gris" style="font-size: 11px;">No puede ser mayor al saldo pendiente.</small>
+      </div>
+
+      <div class="campo">
+        <label for="pago-forma">Forma de pago</label>
+        <select class="select" id="pago-forma">
+          <option value="efectivo">Efectivo</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="mercadopago">Mercado Pago</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+
+      <div class="campo">
+        <label for="pago-obs">Observaciones (opcional)</label>
+        <input class="input" type="text" id="pago-obs" placeholder="Ej: Cobrado en mano del cliente" maxlength="200" />
+      </div>
+
+      <div id="pago-error" class="alerta alerta-error oculto mb-md"></div>
+
+      <div class="flex flex-gap-sm" style="justify-content: flex-end;">
+        <button class="btn btn-fantasma" id="btn-cancelar-pago">Cancelar</button>
+        <button class="btn btn-primario" id="btn-confirmar-pago">Confirmar pago</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/pages/pedidos.js"></script>
+</body>
+</html>
