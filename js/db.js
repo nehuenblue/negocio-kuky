@@ -64,6 +64,7 @@ export async function crearProducto(producto) {
     observaciones: (producto.observaciones || "").trim(),
     estado:        producto.estado || "activo",
     ciclo:         producto.ciclo || "C07",
+    imagen:        producto.imagen || null,
     creadoEn:      serverTimestamp(),
     creadoPor:     auth.currentUser?.email || "desconocido",
   };
@@ -77,7 +78,7 @@ export async function crearProducto(producto) {
 export async function actualizarProducto(codigo, cambios) {
   const camposEditables = [
     "nombre", "categoria", "precio", "costo", "puntos",
-    "stock", "observaciones", "estado", "ciclo"
+    "stock", "observaciones", "estado", "ciclo", "imagen"
   ];
   const datos = {};
   for (const campo of camposEditables) {
