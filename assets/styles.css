@@ -605,6 +605,8 @@ code, .mono {
 .estado-pendiente::before { background: var(--estado-info); }
 .estado-entregado { background: var(--estado-ok-bg);    color: var(--estado-ok); }
 .estado-entregado::before { background: var(--estado-ok); }
+.estado-parcial-entrega { background: var(--estado-warn-bg); color: var(--estado-warn); }
+.estado-parcial-entrega::before { background: var(--estado-warn); }
 .estado-cancelado { background: var(--crema-oscura);    color: var(--tinta-suave); }
 .estado-cancelado::before { background: var(--gris-suave); }
 
