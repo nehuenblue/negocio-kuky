@@ -10,7 +10,8 @@
 import { requireAuth } from "../auth.js";
 import { renderLayout } from "../layout.js";
 import {
-  listarVentas, obtenerVenta, cambiarEstadoPedido, registrarPago, obtenerCliente
+  listarVentas, obtenerVenta, cambiarEstadoPedido, registrarPago, obtenerCliente,
+  listarPagosDeVenta, anularPago
 } from "../db.js";
 import {
   $, $$, escapeHTML, toast, debounce,
@@ -261,27 +262,86 @@ async function abrirDetalle(ventaId) {
     $('#det-obs-bloque').style.display = 'none';
   }
 
-  // Acciones según estado
-  const $btnEntregar = $('#det-entregar');
-  const $btnCancelar = $('#det-cancelar');
-  const $btnPago     = $('#det-pago');
+  // Selector editable de estado del pedido
+  $('#det-cambiar-estado').value = v.estadoPedido || 'pendiente';
 
+  // Botón de pago: solo si hay saldo y no está cancelado
+  const $btnPago = $('#det-pago');
   if (v.estadoPedido === "cancelado") {
-    $btnEntregar.style.display = 'none';
-    $btnCancelar.style.display = 'none';
     $btnPago.style.display = 'none';
   } else {
-    $btnCancelar.style.display = v.estadoPedido !== "cancelado" ? '' : 'none';
-    $btnEntregar.style.display = v.estadoPedido !== "entregado" ? '' : 'none';
-    $btnEntregar.textContent = v.estadoPedido === "entregado" ? "✓ Entregado" : "Marcar entregado";
-    if (v.estadoPedido === "entregado") $btnEntregar.disabled = true;
-    else $btnEntregar.disabled = false;
-
-    // Mostrar botón de pago si hay saldo
     $btnPago.style.display = (v.saldo || 0) > 0 ? '' : 'none';
   }
 
+  // Cargar historial de pagos
+  cargarHistorialPagos(v.id);
+
   $modalDetalle.classList.add('abierto');
+}
+
+// =====================================================================
+// HISTORIAL DE PAGOS DENTRO DEL DETALLE
+// =====================================================================
+async function cargarHistorialPagos(ventaId) {
+  const $bloque = $('#det-pagos-bloque');
+  const $lista = $('#det-pagos-lista');
+  $bloque.style.display = 'block';
+  $lista.innerHTML = '<div style="text-align: center; padding: 10px; color: var(--gris-suave); font-size: 12px;">Cargando…</div>';
+
+  try {
+    const pagos = await listarPagosDeVenta(ventaId);
+    if (pagos.length === 0) {
+      $lista.innerHTML = '<div style="text-align: center; padding: 10px; color: var(--gris-suave); font-size: 12px;">Sin pagos registrados.</div>';
+      return;
+    }
+
+    $lista.innerHTML = pagos.map(p => {
+      const anuladoStyle = p.anulado ? 'opacity: 0.5; text-decoration: line-through;' : '';
+      return `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linea); ${anuladoStyle}">
+          <div style="min-width: 0; flex: 1;">
+            <div style="font-size: 13px; font-weight: 500; color: var(--tinta);">
+              ${formatoMoneda(p.monto)}
+              ${p.anulado ? '<span style="color: var(--estado-error); font-size: 10px; text-decoration: none; margin-left: 6px;">ANULADO</span>' : ''}
+            </div>
+            <div style="font-size: 11px; color: var(--gris-suave);">
+              ${escapeHTML(formatoFecha(p.fecha))} · ${escapeHTML(p.formaPago || 'efectivo')}
+              ${p.observaciones ? `<br>${escapeHTML(p.observaciones)}` : ''}
+              ${p.anulado && p.motivoAnulacion ? `<br><span style="color: var(--estado-error); font-style: italic; text-decoration: none;">Anulado: ${escapeHTML(p.motivoAnulacion)}</span>` : ''}
+            </div>
+          </div>
+          ${!p.anulado ? `<button class="btn-anular-pago-detalle" data-id="${escapeHTML(p.id)}" style="background: transparent; border: 1px solid var(--linea); color: var(--estado-error); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-family: inherit; flex-shrink: 0; margin-left: 10px;">Anular</button>` : ''}
+        </div>`;
+    }).join('');
+
+    // Wire-up de los botones anular
+    $$('.btn-anular-pago-detalle[data-id]').forEach($btn => {
+      $btn.addEventListener('click', async () => {
+        const pagoId = $btn.dataset.id;
+        const pago = pagos.find(p => p.id === pagoId);
+        if (!pago) return;
+        const motivo = prompt(`¿Anular este pago de ${formatoMoneda(pago.monto)}?\n\nMotivo (opcional):`);
+        if (motivo === null) return; // canceló
+        try {
+          await anularPago(pagoId, motivo);
+          toast('Pago anulado.', 'ok');
+          // Recargar el detalle y la lista de pedidos
+          await recargar();
+          // Reabrir el detalle con datos frescos
+          const ventaFresca = await obtenerVenta(ventaId);
+          if (ventaFresca) {
+            ventaActual = ventaFresca;
+            abrirDetalle(ventaId);
+          }
+        } catch (err) {
+          toast('No se pudo anular: ' + err.message, 'error');
+        }
+      });
+    });
+  } catch (err) {
+    console.error('[pedidos] error cargando pagos:', err);
+    $lista.innerHTML = `<div style="color: var(--estado-error); font-size: 12px; padding: 10px;">No se pudo cargar el historial.</div>`;
+  }
 }
 
 function cerrarDetalle() {
@@ -299,38 +359,45 @@ $modalDetalle.addEventListener('click', (e) => {
 });
 
 // =====================================================================
-// ACCIONES SOBRE EL PEDIDO
+// CAMBIAR ESTADO DEL PEDIDO (selector editable)
 // =====================================================================
-$('#det-entregar').addEventListener('click', async () => {
+$('#det-aplicar-estado').addEventListener('click', async () => {
   if (!ventaActual) return;
-  if (ventaActual.estadoPedido === "entregado") return;
-  if (!confirm("¿Marcar este pedido como entregado?")) return;
+  const nuevoEstado = $('#det-cambiar-estado').value;
+  if (nuevoEstado === ventaActual.estadoPedido) {
+    toast('El pedido ya está en ese estado.', 'info');
+    return;
+  }
+
+  let mensaje;
+  if (nuevoEstado === "cancelado") {
+    mensaje = (ventaActual.pagado || 0) > 0
+      ? `Cancelar este pedido revierte el saldo del cliente.\n\nEl cliente ya pagó ${formatoMoneda(ventaActual.pagado)}, ese monto se descontará de su total pagado.\n\n¿Continuar?`
+      : "¿Cancelar este pedido?";
+  } else if (nuevoEstado === "entregado") {
+    mensaje = "¿Marcar este pedido como entregado?";
+  } else {
+    mensaje = "¿Cambiar el estado a 'Pendiente de entrega'?";
+  }
+  if (!confirm(mensaje)) {
+    $('#det-cambiar-estado').value = ventaActual.estadoPedido; // restaurar
+    return;
+  }
+
+  const $btn = $('#det-aplicar-estado');
+  $btn.disabled = true;
+  $btn.innerHTML = '<span class="cargando-spinner"></span>';
 
   try {
-    await cambiarEstadoPedido(ventaActual.id, "entregado");
-    toast('Pedido marcado como entregado.', 'ok');
+    await cambiarEstadoPedido(ventaActual.id, nuevoEstado);
+    toast(`Pedido marcado como ${nuevoEstado}.`, 'ok');
     cerrarDetalle();
     await recargar();
   } catch (err) {
     toast('No se pudo actualizar: ' + err.message, 'error');
-  }
-});
-
-$('#det-cancelar').addEventListener('click', async () => {
-  if (!ventaActual) return;
-  const mensaje = (ventaActual.pagado || 0) > 0
-    ? `Cancelar este pedido revierte el saldo del cliente.\n\nEl cliente ya pagó ${formatoMoneda(ventaActual.pagado)}, ese monto se descontará de su total pagado.\n\n¿Continuar?`
-    : "¿Cancelar este pedido? Esta acción se puede hacer una sola vez.";
-
-  if (!confirm(mensaje)) return;
-
-  try {
-    await cambiarEstadoPedido(ventaActual.id, "cancelado");
-    toast('Pedido cancelado.', 'ok');
-    cerrarDetalle();
-    await recargar();
-  } catch (err) {
-    toast('No se pudo cancelar: ' + err.message, 'error');
+  } finally {
+    $btn.disabled = false;
+    $btn.textContent = 'Aplicar';
   }
 });
 
