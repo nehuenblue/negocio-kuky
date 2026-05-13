@@ -900,3 +900,57 @@ code, .mono {
 }
 .sidebar-overlay.visible { display: block; }
 @media (min-width: 901px) { .sidebar-overlay { display: none !important; } }
+
+/* =====================================================================
+   BOTONES DE WHATSAPP
+   ===================================================================== */
+.btn-wsp,
+.btn-wsp-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #25D366;
+  color: white !important;
+  border: none;
+  border-radius: var(--radio-md);
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all var(--t-rapida);
+}
+.btn-wsp {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.btn-wsp-mini {
+  padding: 6px 8px;
+  font-size: 12px;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+.btn-wsp:hover,
+.btn-wsp-mini:hover {
+  background: #1ebe5a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(37, 211, 102, 0.3);
+}
+.btn-wsp:active,
+.btn-wsp-mini:active {
+  transform: translateY(0);
+}
+.btn-wsp svg,
+.btn-wsp-mini svg {
+  flex-shrink: 0;
+}
+.btn-wsp-outline {
+  background: transparent;
+  color: #25D366 !important;
+  border: 1px solid #25D366;
+}
+.btn-wsp-outline:hover {
+  background: #25D366;
+  color: white !important;
+}
