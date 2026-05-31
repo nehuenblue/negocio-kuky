@@ -174,10 +174,12 @@ export function renderLayout({ usuario, paginaActiva, titulo }) {
   function abrirMenu() {
     $sidebar.classList.add("abierto");
     $overlay.classList.add("visible");
+    document.body.classList.add("menu-abierto");
   }
   function cerrarMenu() {
     $sidebar.classList.remove("abierto");
     $overlay.classList.remove("visible");
+    document.body.classList.remove("menu-abierto");
   }
 
   $abrir?.addEventListener("click", abrirMenu);
