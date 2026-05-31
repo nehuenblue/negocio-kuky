@@ -126,7 +126,13 @@
       .panel-filtros-wrap {
         width: 100%;
         height: auto;
-        max-height: 50vh;
+        max-height: none;       /* sin scroll propio: evita la 2ª barra */
+        overflow: visible;
+      }
+      /* En mobile el panel se expande con la página, no tiene su propio scroll */
+      .panel-filtros {
+        height: auto;
+        overflow: visible;
       }
       .mapa-wrap {
         width: 100%;
