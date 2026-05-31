@@ -188,6 +188,13 @@ code, .mono {
   min-height: 100svh;
 }
 
+/* El segundo hijo del grid (.app) necesita min-width:0 o el contenido
+   ancho (tablas) lo expande y empuja toda la página de costado. */
+.main-wrapper {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
 /* ---- Sidebar ---- */
 .sidebar {
   background: var(--crema-clara);
@@ -863,6 +870,25 @@ code, .mono {
     max-width: 100%;
     overflow-x: hidden;
   }
+  .app {
+    /* En mobile el sidebar es fixed, así que una sola columna real */
+    grid-template-columns: 1fr;
+  }
+  .main-wrapper {
+    min-width: 0;
+    width: 100%;
+    overflow-x: hidden;
+  }
+  /* El título del topbar no debe forzar ancho ni cortar el layout */
+  .topbar-mobile {
+    max-width: 100%;
+  }
+  .topbar-mobile .titulo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
   .grid-2, .grid-3 {
     grid-template-columns: 1fr;
   }
@@ -890,12 +916,20 @@ code, .mono {
     font-size: 13px;
   }
 
-  /* Filtros y barras de herramientas: que envuelvan en vez de desbordar */
+  /* Filtros y barras de herramientas: que envuelvan en vez de desbordar.
+     Usamos !important porque varios inputs traen min-width inline (240px,
+     220px, etc.) que en mobile desbordan la tarjeta. */
   .flex.flex-wrap { flex-wrap: wrap; }
   .card .input,
   .card .select,
-  .card .btn {
-    min-width: 0;
+  .card .btn,
+  .card input[type="search"] {
+    min-width: 0 !important;
+  }
+  /* Que el buscador ocupe toda la fila en mobile en vez de un ancho fijo */
+  .card .input[style*="flex"],
+  .card input[type="search"] {
+    flex: 1 1 100% !important;
   }
 }
 
