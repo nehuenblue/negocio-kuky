@@ -118,14 +118,23 @@
     }
     @media (max-width: 900px) {
       html, body { overflow: auto; }
-      /* El topbar mobile (≡ Mapa) ahora se inserta arriba; el contenido
-         ya no debe forzar 100vh fijo o el mapa se va fuera de pantalla. */
+      /* El topbar mobile (≡ Mapa) se inserta arriba como en el resto de
+         las páginas. El layout deja de ser 100vh fijo y se apila. */
       .app, .main-wrapper {
         height: auto !important;
         min-height: 100svh;
+        display: block;
       }
       .main {
         height: auto !important;
+        display: block;
+      }
+      /* La barra superior con el menú hamburguesa debe verse y quedar fija */
+      .topbar-mobile {
+        display: flex !important;
+        position: sticky;
+        top: 0;
+        z-index: 50;
       }
       .mapa-layout {
         flex-direction: column;
@@ -393,7 +402,6 @@
           <!-- Panel de filtros -->
           <div class="panel-filtros-wrap">
             <aside class="panel-filtros">
-              <h2>Mapa<em>.</em></h2>
               <p class="subtitulo-panel" id="resumen-mapa">Cargando…</p>
 
               <!-- Stats -->
@@ -449,11 +457,6 @@
               </div>
 
               <button class="btn btn-fantasma btn-sm" id="btn-limpiar" style="width: 100%; margin-top: 10px;">Limpiar filtros</button>
-
-              <!-- Volver al dashboard (desktop) -->
-              <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--linea);">
-                <a href="dashboard.html" class="btn btn-fantasma btn-sm" style="width: 100%;">← Dashboard</a>
-              </div>
             </aside>
           </div>
 
