@@ -3,6 +3,7 @@
 // =====================================================================
 
 import { requireAuth } from "../auth.js";
+import { renderLayout } from "../layout.js";
 import { listarClientes, listarVentas } from "../db.js";
 import { ZONAS, CENTRO_DEFAULT } from "../zonas.js";
 import { $, $$, escapeHTML, toast, debounce, formatoMoneda } from "../utils.js";
@@ -67,6 +68,11 @@ document.getElementById('pantalla-carga').style.display = 'none';
 // Usamos 'block' (no 'grid') para no romper ese layout: el mapa va a
 // pantalla completa con su panel lateral propio, sin el sidebar global.
 document.getElementById('app').style.display = 'block';
+
+// Renderizar el layout (sidebar + topbar mobile con el menú hamburguesa),
+// igual que el resto de las páginas. En mobile esto da el botón de menú
+// "≡" y el título "Mapa" arriba para poder navegar a las otras secciones.
+renderLayout({ usuario, paginaActiva: "mapa" });
 
 // =====================================================================
 // Estado
