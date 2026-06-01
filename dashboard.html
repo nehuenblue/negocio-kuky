@@ -105,6 +105,12 @@
                 </svg>
                 Refrescar
               </button>
+              <button class="btn btn-primario" id="btn-exportar-reporte" aria-label="Exportar reporte">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Exportar
+              </button>
             </div>
 
             <!-- Rango personalizado (se muestra al elegir "Personalizado…") -->
@@ -224,6 +230,8 @@
 
   <!-- Chart.js para los gráficos -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
   <!-- Lógica del dashboard -->
   <script type="module" src="js/pages/dashboard.js"></script>
