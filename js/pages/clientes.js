@@ -89,6 +89,9 @@ const $contSeleccion   = $('#contador-seleccion');
 const $totalMostrados  = $('#total-mostrados');
 const $btnSelAll       = $('#btn-seleccionar-todos');
 const $btnQuitarSel    = $('#btn-quitar-seleccion');
+const $btnExportarPDF  = $('#btn-exportar-pdf');
+const $btnExportarXls  = $('#btn-exportar-excel');
+const $btnExportarWsp  = $('#btn-exportar-wsp');
 
 // =====================================================================
 // CARGA INICIAL
@@ -170,7 +173,7 @@ $btnLimpiar.addEventListener('click', () => {
 // RENDER LISTA
 // =====================================================================
 function renderLista() {
-  const total = clientesData.length;
+  const total = clientesData.filter(c => c.estado !== "inactivo").length;
   const visibles = clientesFiltrados.length;
   const conDeuda = clientesData.filter(c => (c.saldoPendiente || 0) > 0).length;
 
@@ -283,6 +286,150 @@ $btnQuitarSel.addEventListener('click', () => {
   actualizarBarraSeleccion();
   renderLista();
 });
+
+// =====================================================================
+// EXPORTACIÓN DE SELECCIONADOS (PDF / Excel / WhatsApp)
+// =====================================================================
+
+// Devuelve los objetos cliente correspondientes a la selección actual
+function clientesSeleccionados() {
+  return clientesData.filter(c => seleccionados.has(c.id));
+}
+
+// ----- Excel (CSV compatible con Excel, sin librerías) -----
+$btnExportarXls.addEventListener('click', () => {
+  const sel = clientesSeleccionados();
+  if (sel.length === 0) {
+    toast('Seleccioná al menos un cliente.', 'warn');
+    return;
+  }
+
+  const cols = ['Nombre', 'Apellido', 'Teléfono', 'Zona', 'Dirección',
+                'Estado', 'Saldo pendiente', 'Total comprado', 'Total pagado', 'Observaciones'];
+
+  const escapar = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const filas = sel.map(c => [
+    c.nombre || '',
+    c.apellido || '',
+    c.telefono || '',
+    c.zona || '',
+    c.direccion || '',
+    c.estado === 'inactivo' ? 'Inactivo' : 'Activo',
+    c.saldoPendiente || 0,
+    c.totalComprado || 0,
+    c.totalPagado || 0,
+    c.observaciones || '',
+  ].map(escapar).join(';'));
+
+  // BOM para que Excel reconozca UTF-8 (acentos)
+  const csv = '\uFEFF' + cols.join(';') + '\n' + filas.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `clientes_${fechaArchivo()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(`Excel generado (${sel.length} ${sel.length === 1 ? 'cliente' : 'clientes'}).`, 'ok');
+});
+
+// ----- PDF (jsPDF + autoTable, cargados en el HTML) -----
+$btnExportarPDF.addEventListener('click', () => {
+  const sel = clientesSeleccionados();
+  if (sel.length === 0) {
+    toast('Seleccioná al menos un cliente.', 'warn');
+    return;
+  }
+  const jsPDFCtor = window.jspdf?.jsPDF;
+  if (!jsPDFCtor) {
+    toast('No se pudo cargar el generador de PDF. Revisá tu conexión.', 'error');
+    return;
+  }
+
+  const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
+
+  // Encabezado
+  doc.setFontSize(18);
+  doc.text('Emanuel Cosméticos — Clientes', 40, 48);
+  doc.setFontSize(10);
+  doc.setTextColor(120);
+  doc.text(`Generado: ${new Date().toLocaleString('es-AR')} · ${sel.length} cliente(s)`, 40, 66);
+  doc.setTextColor(0);
+
+  const cuerpo = sel.map(c => [
+    `${c.nombre || ''} ${c.apellido || ''}`.trim(),
+    c.telefono || '—',
+    c.zona || '—',
+    c.direccion || '—',
+    formatoMoneda(c.saldoPendiente || 0),
+    c.estado === 'inactivo' ? 'Inactivo' : 'Activo',
+  ]);
+
+  doc.autoTable({
+    startY: 84,
+    head: [['Cliente', 'Teléfono', 'Zona', 'Dirección', 'Saldo', 'Estado']],
+    body: cuerpo,
+    styles: { fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [60, 42, 35], textColor: [248, 241, 233] },
+    alternateRowStyles: { fillColor: [253, 248, 243] },
+    margin: { left: 40, right: 40 },
+  });
+
+  doc.save(`clientes_${fechaArchivo()}.pdf`);
+  toast(`PDF generado (${sel.length} ${sel.length === 1 ? 'cliente' : 'clientes'}).`, 'ok');
+});
+
+// ----- WhatsApp -----
+// WhatsApp no permite un solo chat hacia múltiples destinatarios.
+// Por eso, la acción masiva abre el chat del primer seleccionado con teléfono válido.
+$btnExportarWsp.addEventListener('click', () => {
+  const sel = clientesSeleccionados();
+  if (sel.length === 0) {
+    toast('Seleccioná al menos un cliente.', 'warn');
+    return;
+  }
+
+  const conTel = sel.filter(c => c.telefono && esTelefonoArgentino(c.telefono));
+  if (conTel.length === 0) {
+    toast('Ninguno de los seleccionados tiene un teléfono válido.', 'warn');
+    return;
+  }
+
+  if (sel.length > 1) {
+    toast('WhatsApp es de a uno: abriendo el chat del primer cliente con teléfono.', 'info');
+  }
+
+  const c = conTel[0];
+  const debe = (c.saldoPendiente || 0) > 0;
+  const nombre = `${c.nombre || ''}`.trim();
+  const mensaje = debe
+    ? TEMPLATES_WSP.recordatorioCobro({
+        nombreCliente: nombre,
+        saldoPendiente: c.saldoPendiente,
+        miNombre: "Emanuel",
+      })
+    : TEMPLATES_WSP.saludoLibre({ nombreCliente: nombre, miNombre: "Emanuel" });
+
+  const link = generarLinkWhatsApp(c.telefono, mensaje);
+  if (!link) {
+    toast('No se pudo generar el link de WhatsApp.', 'error');
+    return;
+  }
+  window.open(link, '_blank', 'noopener');
+});
+
+// Nombre de archivo con fecha YYYY-MM-DD
+function fechaArchivo() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 // =====================================================================
 // MODAL ALTA / EDICIÓN
@@ -583,8 +730,9 @@ async function abrirFicha(clienteId) {
       ? TEMPLATES_WSP.recordatorioCobro({
           nombreCliente: nombre,
           saldoPendiente: cliente.saldoPendiente,
+          miNombre: "Emanuel",
         })
-      : TEMPLATES_WSP.saludoLibre({ nombreCliente: nombre });
+      : TEMPLATES_WSP.saludoLibre({ nombreCliente: nombre, miNombre: "Emanuel" });
     const linkWsp = generarLinkWhatsApp(cliente.telefono, mensajeWsp);
     if (linkWsp) {
       wspBlockHTML = `
