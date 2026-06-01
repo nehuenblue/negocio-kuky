@@ -1,5 +1,5 @@
 // =====================================================================
-// Emanuel Cosméticos · Módulo de exportación de reportes (reporte-export.js)
+// Módulo de exportación de reportes (reporte-export.js)
 // ---------------------------------------------------------------------
 // Genera un reporte completo del período (vendido, cobrado, deuda,
 // deudores, ganancia, ventas) y lo exporta en PDF, Word o Excel.
@@ -17,6 +17,10 @@ import {
 import {
   formatoMoneda, formatoFecha, toast,
 } from "./utils.js";
+import { APP_INFO } from "./firebase-config.js";
+
+// Nombre del negocio (tomado de la config, así cada sistema usa el suyo)
+const NOMBRE_NEGOCIO = APP_INFO?.nombre || "Mi negocio";
 
 // ---------------------------------------------------------------------
 // Recolección de datos del período
@@ -93,7 +97,7 @@ function generarPDF(datos, meta) {
   // Encabezado
   doc.setFontSize(20);
   doc.setTextColor(60, 42, 35);
-  doc.text('Emanuel Cosméticos', 40, 50);
+  doc.text(NOMBRE_NEGOCIO, 40, 50);
   doc.setFontSize(13);
   doc.text('Reporte de ventas', 40, 70);
   doc.setFontSize(10);
@@ -187,7 +191,7 @@ function generarExcel(datos, meta) {
   const linea = (arr) => arr.map(esc).join(';');
 
   const filas = [];
-  filas.push(linea(['Emanuel Cosméticos — Reporte de ventas']));
+  filas.push(linea([NOMBRE_NEGOCIO + ' — Reporte de ventas']));
   filas.push(linea([`Período: ${meta.etiqueta} (${meta.desdeStr} - ${meta.hastaStr})`]));
   filas.push(linea([`Generado: ${new Date().toLocaleString('es-AR')}`]));
   filas.push('');
@@ -269,7 +273,7 @@ function generarWord(datos, meta) {
   .kpi-tabla td:last-child { text-align: right; font-weight: bold; }
 </style></head>
 <body>
-  <h1>Emanuel Cosméticos</h1>
+  <h1>${NOMBRE_NEGOCIO}</h1>
   <div style="font-size:13pt; color:#8a5448;">Reporte de ventas</div>
   <div class="meta">
     Período: <strong>${meta.etiqueta}</strong> (${meta.desdeStr} – ${meta.hastaStr})<br>
@@ -416,7 +420,7 @@ export async function abrirExportador({ desde, hasta, etiqueta }) {
   $ov.querySelector('#export-compartir').onclick = async () => {
     const r = construir();
     if (!r) return;
-    const titulo = `Reporte ${metaCache.etiqueta} — Emanuel Cosméticos`;
+    const titulo = `Reporte ${metaCache.etiqueta} — ${NOMBRE_NEGOCIO}`;
     const ok = await compartirArchivo(r.blob, r.nombre, r.tipo, titulo);
     if (!ok) {
       // Fallback: descargar y avisar cómo adjuntarlo
