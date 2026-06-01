@@ -206,6 +206,9 @@ code, .mono {
   display: flex;
   flex-direction: column;
   z-index: var(--z-sidebar);
+  /* Si el menú es más alto que la pantalla, permitir scroll para que el
+     pie (usuario + cerrar sesión) siempre sea alcanzable. */
+  overflow-y: auto;
 }
 
 .sidebar-marca {
