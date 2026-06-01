@@ -142,9 +142,9 @@
             <div class="flex flex-gap-sm flex-wrap">
               <button class="btn btn-secundario btn-sm" id="btn-seleccionar-todos">Seleccionar todos</button>
               <button class="btn btn-fantasma btn-sm" id="btn-quitar-seleccion" style="color: var(--crema-clara);">Quitar selección</button>
-              <button class="btn btn-secundario btn-sm" disabled title="Disponible en F8">📄 PDF</button>
-              <button class="btn btn-secundario btn-sm" disabled title="Disponible en F8">📊 Excel</button>
-              <button class="btn btn-secundario btn-sm" disabled title="Disponible en F8">💬 WhatsApp</button>
+              <button class="btn btn-secundario btn-sm" id="btn-exportar-pdf">📄 PDF</button>
+              <button class="btn btn-secundario btn-sm" id="btn-exportar-excel">📊 Excel</button>
+              <button class="btn btn-secundario btn-sm" id="btn-exportar-wsp">💬 WhatsApp</button>
             </div>
           </div>
         </div>
@@ -281,6 +281,9 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script type="module" src="js/pages/clientes.js"></script>
 </body>
 </html>
+
