@@ -13,6 +13,7 @@ import {
   $, $$, escapeHTML, toast, formatoMoneda, formatoMonedaPartes, RANGOS,
   generarLinkWhatsApp, TEMPLATES_WSP
 } from "../utils.js";
+import { abrirExportador } from "../reporte-export.js";
 
 // =====================================================================
 // Errores
@@ -39,6 +40,7 @@ renderLayout({ usuario, paginaActiva: "reportes" });
 // =====================================================================
 let rangoActual = "esteMes";
 let chartCategoria = null;
+let periodoActual = { desde: null, hasta: null, etiqueta: "Este mes" };
 
 // Definir un rango extra para "últimos 3 meses"
 RANGOS.ultimosTresMeses = () => {
@@ -72,8 +74,10 @@ async function cargar() {
     desde = r.desde;
     hasta = r.hasta;
     $('#resumen-reportes').textContent = `${r.etiqueta} · ${desde.toLocaleDateString('es-AR')} – ${hasta.toLocaleDateString('es-AR')}`;
+    periodoActual = { desde, hasta, etiqueta: r.etiqueta };
   } else {
     $('#resumen-reportes').textContent = "Todo el histórico";
+    periodoActual = { desde: null, hasta: null, etiqueta: "Todo el histórico" };
   }
 
   // Disparar todos los reportes en paralelo
@@ -340,6 +344,13 @@ function renderCategoria(dist) {
     }
   });
 }
+
+// =====================================================================
+// EXPORTAR REPORTE
+// =====================================================================
+$('#btn-exportar-reporte')?.addEventListener('click', () => {
+  abrirExportador(periodoActual);
+});
 
 // =====================================================================
 // CARGAR
