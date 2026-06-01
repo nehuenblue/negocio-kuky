@@ -25,25 +25,32 @@
       padding: 0;
       overflow: hidden;
     }
+    /* No forzamos 100vw: dejamos que el layout (sidebar + main) reparta
+       el ancho. El mapa ocupa el alto de la ventana y el ancho que le
+       deja el área de contenido. */
     .app, .main-wrapper {
       height: 100vh !important;
-      width: 100%;
       margin: 0 !important;
       padding: 0 !important;
+      min-width: 0;
     }
+    .main-wrapper { min-width: 0; }
     .main {
       height: 100vh !important;
       width: 100%;
       padding: 0 !important;
       margin: 0 !important;
       max-width: none !important;
+      min-width: 0;
+      overflow: hidden;
     }
 
     .mapa-layout {
       display: flex;
       flex-direction: row;
       height: 100vh;
-      width: 100vw;
+      width: 100%;        /* 100% del área de contenido, NO del viewport */
+      min-width: 0;
     }
     .panel-filtros-wrap {
       width: 320px;
@@ -55,7 +62,7 @@
       flex: 1 1 auto;
       height: 100vh;
       position: relative;
-      min-width: 200px;
+      min-width: 0;       /* permite que el flex item se encoja */
     }
     #mapa-container {
       position: absolute;
