@@ -1,13 +1,8 @@
 // =====================================================================
-// Emanuel Cosméticos — Firebase Config
+// Negocio Kuky — Firebase Config
 //
-// COMPLETAR los valores marcados con TODO con los datos del NUEVO
-// proyecto Firebase (emanuel-cosmeticos).
-//
-// Cómo obtenerlos:
-//   1. Firebase Console → Project Settings → General → Your apps
-//   2. Si todavía no creaste una app Web, hacé clic en "Add app" → "</>"
-//   3. Copiá los valores de firebaseConfig
+// Proyecto Firebase: negocio-kuky (base de datos propia, separada de
+// Emanuel Cosméticos).
 //
 // IMPORTANTE:
 //   - Estas keys son PÚBLICAS por diseño en Firebase Web. La seguridad
@@ -22,14 +17,14 @@ import { getAuth, setPersistence, browserLocalPersistence }
 import { getFirestore, serverTimestamp, GeoPoint }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// TODO: reemplazar con la config del NUEVO proyecto emanuel-cosmeticos
+// Config del proyecto Firebase "negocio-kuky"
 const firebaseConfig = {
-  apiKey:            "AIzaSyBzhUo2XFlVTs_TeZrEI3IKiyvlWvLHaNM",
-  authDomain:        "emanuel-natura.firebaseapp.com",
-  projectId:         "emanuel-natura",
-  storageBucket:     "emanuel-natura.firebasestorage.app",
-  messagingSenderId: "481732059058",
-  appId:             "1:481732059058:web:72def09409841a952d0eab"
+  apiKey:            "AIzaSyDRpzVj80kSwpFdIhFGk5d7UIimzD5-Dkw",
+  authDomain:        "negocio-kuky.firebaseapp.com",
+  projectId:         "negocio-kuky",
+  storageBucket:     "negocio-kuky.firebasestorage.app",
+  messagingSenderId: "851583077941",
+  appId:             "1:851583077941:web:e3e31d28eb5801f5bceb7c"
 };
 
 export const app  = initializeApp(firebaseConfig);
@@ -45,8 +40,8 @@ setPersistence(auth, browserLocalPersistence).catch(err => {
 
 // Metadatos de la app (constantes globales)
 export const APP_INFO = Object.freeze({
-  nombre:     "Emanuel Cosméticos",
-  cicloActual: "C07",
+  nombre:     "Negocio Kuky",
+  cicloActual: "C01",
   moneda:     "ARS",
   simbolo:    "$",
   zonaHoraria: "America/Argentina/Buenos_Aires"
