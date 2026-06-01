@@ -1105,20 +1105,26 @@ export async function obtenerKPIsDashboard({ desde, hasta } = {}) {
     listarProductos(),
   ]);
 
-  const totalVendidoMes = ventasMes.reduce((s, v) => s + (v.total || 0), 0);
-  const totalPagadoMes  = ventasMes.reduce((s, v) => s + (v.pagado || 0), 0);
-  const totalPendiente  = ventasMes.reduce((s, v) => s + (v.saldo || 0), 0);
+  // Los pedidos cancelados no suman a los totales de dinero (igual que en Pedidos)
+  const ventasMesComputables = ventasMes.filter(v => v.estadoPedido !== "cancelado");
+  const ventasHoyComputables = ventasHoy.filter(v => v.estadoPedido !== "cancelado");
+
+  const totalVendidoMes = ventasMesComputables.reduce((s, v) => s + (v.total || 0), 0);
+  const totalPagadoMes  = ventasMesComputables.reduce((s, v) => s + (v.pagado || 0), 0);
+  const totalPendiente  = ventasMesComputables.reduce((s, v) => s + (v.saldo || 0), 0);
 
   const pedidosPendientes = ventasMes.filter(v => v.estadoPedido === "pendiente").length;
   const pedidosEntregados = ventasMes.filter(v => v.estadoPedido === "entregado").length;
 
   const totalCobradoMes = pagosMes.reduce((s, p) => s + (p.monto || 0), 0);
-  const totalVendidoHoy = ventasHoy.reduce((s, v) => s + (v.total || 0), 0);
-  const cantVentasHoy   = ventasHoy.length;
+  const totalVendidoHoy = ventasHoyComputables.reduce((s, v) => s + (v.total || 0), 0);
+  const cantVentasHoy   = ventasHoyComputables.length;
 
-  const cantClientes = clientesTodos.length;
-  const clientesConDeuda = clientesTodos.filter(c => (c.saldoPendiente || 0) > 0).length;
-  const deudaTotal = clientesTodos.reduce((s, c) => s + (c.saldoPendiente || 0), 0);
+  // Solo contamos clientes activos (los dados de baja no suman al total)
+  const clientesActivos = clientesTodos.filter(c => c.estado !== "inactivo");
+  const cantClientes = clientesActivos.length;
+  const clientesConDeuda = clientesActivos.filter(c => (c.saldoPendiente || 0) > 0).length;
+  const deudaTotal = clientesActivos.reduce((s, c) => s + (c.saldoPendiente || 0), 0);
 
   const cantProductos = productosTodos.length;
   const productosARevisar = productosTodos.filter(p => p.estado === "revisar").length;
