@@ -1,5 +1,5 @@
 // =====================================================================
-// Emanuel Cosméticos · Clientes (js/pages/clientes.js)
+// Negocio Kuky · Clientes (js/pages/clientes.js)
 // ---------------------------------------------------------------------
 // Funcionalidad:
 //   - Listado con buscador + filtros (estado, zona)
@@ -356,7 +356,7 @@ $btnExportarPDF.addEventListener('click', () => {
 
   // Encabezado
   doc.setFontSize(18);
-  doc.text('Emanuel Cosméticos — Clientes', 40, 48);
+  doc.text('Negocio Kuky — Clientes', 40, 48);
   doc.setFontSize(10);
   doc.setTextColor(120);
   doc.text(`Generado: ${new Date().toLocaleString('es-AR')} · ${sel.length} cliente(s)`, 40, 66);
@@ -412,9 +412,9 @@ $btnExportarWsp.addEventListener('click', () => {
     ? TEMPLATES_WSP.recordatorioCobro({
         nombreCliente: nombre,
         saldoPendiente: c.saldoPendiente,
-        miNombre: "Emanuel",
+        miNombre: "Negocio Kuky",
       })
-    : TEMPLATES_WSP.saludoLibre({ nombreCliente: nombre, miNombre: "Emanuel" });
+    : TEMPLATES_WSP.saludoLibre({ nombreCliente: nombre, miNombre: "Negocio Kuky" });
 
   const link = generarLinkWhatsApp(c.telefono, mensaje);
   if (!link) {
@@ -730,9 +730,9 @@ async function abrirFicha(clienteId) {
       ? TEMPLATES_WSP.recordatorioCobro({
           nombreCliente: nombre,
           saldoPendiente: cliente.saldoPendiente,
-          miNombre: "Emanuel",
+          miNombre: "Negocio Kuky",
         })
-      : TEMPLATES_WSP.saludoLibre({ nombreCliente: nombre, miNombre: "Emanuel" });
+      : TEMPLATES_WSP.saludoLibre({ nombreCliente: nombre, miNombre: "Negocio Kuky" });
     const linkWsp = generarLinkWhatsApp(cliente.telefono, mensajeWsp);
     if (linkWsp) {
       wspBlockHTML = `
