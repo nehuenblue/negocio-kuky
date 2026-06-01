@@ -24,15 +24,47 @@ export async function obtenerConfig() {
 // =====================================================================
 //  PRODUCTOS
 // =====================================================================
+// ---------------------------------------------------------------------
+// Caché de productos en memoria (dura lo que dura la sesión / pestaña).
+// Evita releer los ~1600 productos de Firestore en cada pantalla, lo que
+// disparaba el consumo de lecturas. Se invalida al crear/editar/borrar.
+// ---------------------------------------------------------------------
+let _cacheProductos = null;        // array con TODOS los productos
+let _cacheProductosPromesa = null; // promesa en vuelo (evita lecturas duplicadas simultáneas)
+
+export function invalidarCacheProductos() {
+  _cacheProductos = null;
+  _cacheProductosPromesa = null;
+}
+
+async function cargarTodosLosProductos() {
+  // Si ya están en caché, devolverlos sin leer Firestore
+  if (_cacheProductos) return _cacheProductos;
+  // Si hay una lectura en curso, esperar esa misma (no lanzar otra)
+  if (_cacheProductosPromesa) return _cacheProductosPromesa;
+
+  _cacheProductosPromesa = (async () => {
+    const q = query(
+      collection(db, "productos"),
+      orderBy("categoria"), orderBy("nombre")
+    );
+    const snap = await getDocs(q);
+    _cacheProductos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    _cacheProductosPromesa = null;
+    return _cacheProductos;
+  })();
+
+  return _cacheProductosPromesa;
+}
+
 export async function listarProductos({ categoria = null, soloActivos = false, estado = null } = {}) {
-  const filtros = [];
-  if (categoria)   filtros.push(where("categoria", "==", categoria));
-  if (estado)      filtros.push(where("estado",    "==", estado));
-  if (soloActivos) filtros.push(where("estado",    "==", "activo"));
-  filtros.push(orderBy("categoria"), orderBy("nombre"));
-  const q = query(collection(db, "productos"), ...filtros);
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // Leemos todos una vez (cacheado) y filtramos en memoria.
+  const todos = await cargarTodosLosProductos();
+  let res = todos;
+  if (categoria)   res = res.filter(p => p.categoria === categoria);
+  if (estado)      res = res.filter(p => p.estado === estado);
+  if (soloActivos) res = res.filter(p => p.estado === "activo");
+  return res;
 }
 
 export async function obtenerProducto(codigo) {
@@ -69,6 +101,7 @@ export async function crearProducto(producto) {
     creadoPor:     auth.currentUser?.email || "desconocido",
   };
   await setDoc(doc(db, "productos", codigo), datos);
+  invalidarCacheProductos();
   return codigo;
 }
 
@@ -96,6 +129,7 @@ export async function actualizarProducto(codigo, cambios) {
   datos.actualizadoEn = serverTimestamp();
   datos.actualizadoPor = auth.currentUser?.email || "desconocido";
   await updateDoc(doc(db, "productos", codigo), datos);
+  invalidarCacheProductos();
 }
 
 /**
@@ -104,6 +138,7 @@ export async function actualizarProducto(codigo, cambios) {
  */
 export async function eliminarProducto(codigo) {
   await deleteDoc(doc(db, "productos", codigo));
+  invalidarCacheProductos();
 }
 
 /**
@@ -157,6 +192,7 @@ export async function actualizarPreciosEnLote(codigos, ajuste) {
     }
     await batch.commit();
   }
+  invalidarCacheProductos();
   return actualizados;
 }
 
@@ -415,6 +451,8 @@ export async function aplicarDiffCatalogo(diff, cicloNuevo, onProgreso) {
       resumen:    diff.resumen,
     }).catch(() => {});  // No bloqueante si falla
   } catch (e) { /* no crítico */ }
+
+  invalidarCacheProductos();
 
   return {
     procesados,
