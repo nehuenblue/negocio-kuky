@@ -5,7 +5,7 @@
 import { requireAuth } from "../auth.js";
 import { renderLayout } from "../layout.js";
 import {
-  listarClientes, listarProductos, crearVenta
+  listarClientes, listarProductos, crearVenta, actualizarProducto
 } from "../db.js";
 import {
   $, $$, escapeHTML, toast, debounce,
@@ -75,11 +75,11 @@ async function cargarDatos() {
   try {
     [clientes, productos] = await Promise.all([
       listarClientes({ soloActivos: false }),
-      listarProductos({ soloActivos: true }),
+      listarProductos({ soloActivos: false }),
     ]);
 
-    // Filtrar productos válidos para vender (precio > 0)
-    productos = productos.filter(p => (p.precio || 0) > 0);
+    // Mostramos TODOS los productos (incluidos los "a revisar" y los de precio 0).
+    // Si un producto no tiene precio, se pedirá al agregarlo al carrito (ver agregarAlCarrito).
 
     // Categorías
     const cats = [...new Set(productos.map(p => p.categoria).filter(Boolean))].sort();
@@ -237,7 +237,7 @@ function renderProductos() {
 // =====================================================================
 // CARRITO
 // =====================================================================
-function agregarAlCarrito(codigo) {
+async function agregarAlCarrito(codigo) {
   const prod = productos.find(p => p.id === codigo);
   if (!prod) return;
 
@@ -245,16 +245,46 @@ function agregarAlCarrito(codigo) {
   const existente = carrito.find(it => it.codigo === codigo);
   if (existente) {
     existente.cantidad += 1;
-  } else {
-    carrito.push({
-      codigo:     prod.id,
-      nombre:     prod.nombre,
-      categoria:  prod.categoria,
-      cantidad:   1,
-      precioUnit: prod.precio,
-      imagen:     prod.imagen || null,
-    });
+    renderCarrito();
+    actualizarVista();
+    return;
   }
+
+  // Si el producto no tiene precio cargado, pedirlo antes de agregarlo
+  let precioUnit = Number(prod.precio) || 0;
+  if (precioUnit <= 0) {
+    const entrada = prompt(
+      `"${prod.nombre}" no tiene precio cargado.\nIngresá el precio unitario:`,
+      ''
+    );
+    if (entrada === null) return; // canceló → no se agrega
+    precioUnit = Math.round(Number(entrada) || 0);
+    if (precioUnit <= 0) {
+      mostrarError('El precio debe ser mayor a 0 para agregar el producto.');
+      return;
+    }
+
+    // Guardar el precio en el catálogo de forma permanente (Firestore)
+    try {
+      await actualizarProducto(prod.id, { precio: precioUnit });
+      prod.precio = precioUnit; // actualizar copia en memoria
+      toast(`Precio de "${prod.nombre}" guardado: ${formatoMoneda(precioUnit)}`, 'ok');
+    } catch (err) {
+      console.error('[ventas] no se pudo guardar el precio:', err);
+      // La venta continúa con el precio ingresado aunque falle el guardado
+      mostrarError('Se usará el precio para esta venta, pero no se pudo guardar en el catálogo.');
+    }
+  }
+
+  carrito.push({
+    codigo:     prod.id,
+    nombre:     prod.nombre,
+    categoria:  prod.categoria,
+    cantidad:   1,
+    precioUnit: precioUnit,
+    imagen:     prod.imagen || null,
+  });
+
   renderCarrito();
   actualizarVista();
 }
