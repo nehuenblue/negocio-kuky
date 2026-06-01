@@ -1,5 +1,5 @@
 // =====================================================================
-// Emanuel Cosméticos — Firestore Security Rules
+// Negocio Kuky — Firestore Security Rules
 // Versión: F0 (autenticación obligatoria + control por rol admin)
 //
 // Modelo:
