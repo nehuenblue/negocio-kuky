@@ -1026,7 +1026,7 @@ export const DESTINOS_FONDOS = [
   { id: 'iglesia',          nombre: 'Iglesia',           icono: '⛪' },
   { id: 'donacion',         nombre: 'Donación',          icono: '💝' },
   { id: 'ahorro',           nombre: 'Ahorro',            icono: '💰' },
-  { id: 'proveedor',        nombre: 'Proveedor (Natura)', icono: '📦' },
+  { id: 'proveedor',        nombre: 'Proveedor',         icono: '📦' },
   { id: 'gastos_personales', nombre: 'Gastos personales', icono: '🛒' },
   { id: 'reinversion',      nombre: 'Reinversión',       icono: '🔄' },
   { id: 'otros',            nombre: 'Otros',             icono: '📝' },
