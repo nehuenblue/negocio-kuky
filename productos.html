@@ -340,7 +340,13 @@
             <p class="subtitulo mt-sm" id="resumen-productos">Cargando…</p>
           </div>
           <div class="flex flex-gap-sm flex-wrap">
-            <button class="btn btn-primario" id="btn-nuevo">
+            <button class="btn btn-primario" id="btn-carga-rapida">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9v6M10 9v6M13 9v6M17 9v6"/>
+              </svg>
+              Carga rápida
+            </button>
+            <button class="btn btn-secundario" id="btn-nuevo">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
@@ -466,10 +472,6 @@
             <label for="f-costo">Costo</label>
             <input class="input" type="number" id="f-costo" min="0" step="1" placeholder="0" />
           </div>
-          <div class="campo">
-            <label for="f-puntos">Puntos</label>
-            <input class="input" type="number" id="f-puntos" min="0" step="1" placeholder="0" />
-          </div>
         </div>
 
         <!-- Ganancia calculada -->
@@ -558,6 +560,66 @@
       <div class="flex flex-gap-sm" style="justify-content: flex-end;">
         <button class="btn btn-fantasma" id="btn-cancelar-masivo">Cancelar</button>
         <button class="btn btn-primario" id="btn-aplicar-masivo">Aplicar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: CARGA RÁPIDA ===================== -->
+  <div class="modal-overlay" id="modal-carga-rapida">
+    <div class="modal" style="max-width: 560px;">
+      <div class="flex flex-between mb-md">
+        <div>
+          <h2 class="titulo-card">Carga rápida</h2>
+          <div class="subtitulo" id="cr-contador">0 productos cargados en esta sesión</div>
+        </div>
+        <button class="btn-icono btn-fantasma" id="cr-cerrar" aria-label="Cerrar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <p class="subtitulo mb-md" style="font-size:12px;">
+        Escaneá el código con el lector (salta solo al nombre). Completá los datos y presioná Enter o el botón para guardar y cargar el siguiente.
+      </p>
+
+      <div class="campo">
+        <label for="cr-codigo">Código (escaneá la etiqueta)</label>
+        <input class="input" type="text" id="cr-codigo" autocomplete="off" placeholder="Escaneá o escribí el código…" style="font-family: var(--font-mono);" />
+        <small class="color-gris" id="cr-aviso-codigo" style="font-size:11px;"></small>
+      </div>
+
+      <div class="grid-2">
+        <div class="campo">
+          <label for="cr-nombre">Nombre *</label>
+          <input class="input" type="text" id="cr-nombre" autocomplete="off" maxlength="80" />
+        </div>
+        <div class="campo">
+          <label for="cr-precio">Precio</label>
+          <input class="input" type="number" id="cr-precio" inputmode="numeric" min="0" step="1" placeholder="0" />
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="campo">
+          <label for="cr-categoria">Categoría</label>
+          <select class="select" id="cr-categoria"></select>
+        </div>
+        <div class="campo">
+          <label for="cr-stock">Stock</label>
+          <input class="input" type="number" id="cr-stock" inputmode="numeric" min="0" step="1" placeholder="0" />
+        </div>
+      </div>
+
+      <!-- Campo para escribir una categoría nueva (se muestra al elegir "+ Nueva categoría") -->
+      <div class="campo oculto" id="cr-nueva-cat-wrap">
+        <label for="cr-nueva-cat">Nueva categoría</label>
+        <input class="input" type="text" id="cr-nueva-cat" autocomplete="off" maxlength="40" placeholder="Ej: Juguetería" />
+      </div>
+
+      <div id="cr-error" class="alerta alerta-error oculto mb-md"></div>
+
+      <div class="flex flex-gap-sm" style="justify-content: flex-end; margin-top: 12px;">
+        <button type="button" class="btn btn-fantasma" id="cr-terminar">Terminar</button>
+        <button type="button" class="btn btn-primario" id="cr-guardar">Guardar y siguiente</button>
       </div>
     </div>
   </div>
