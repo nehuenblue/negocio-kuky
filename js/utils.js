@@ -1,5 +1,5 @@
 // =====================================================================
-// Emanuel Cosméticos · Utilidades transversales (utils.js)
+// Negocio Kuky · Utilidades transversales (utils.js)
 // =====================================================================
 
 import { APP_INFO } from "./firebase-config.js";
@@ -231,11 +231,15 @@ export function generarLinkWhatsApp(telefono, mensaje = "") {
  * Templates de mensajes de WhatsApp para distintos contextos.
  * Cada uno recibe un objeto con datos y devuelve un string.
  */
+
+// Firma por defecto: el nombre del negocio (si no se pasa miNombre explícito)
+const FIRMA_NEGOCIO = APP_INFO?.nombre || "";
+
 export const TEMPLATES_WSP = {
   /**
    * Recordatorio de cobro para un cliente con deuda.
    */
-  recordatorioCobro({ nombreCliente, saldoPendiente, miNombre = "" }) {
+  recordatorioCobro({ nombreCliente, saldoPendiente, miNombre = FIRMA_NEGOCIO }) {
     const nombre = (nombreCliente || "").split(/\s+/)[0] || "";
     const monto = formatoMoneda(saldoPendiente);
     const firma = miNombre ? `\n\nSaludos,\n${miNombre}` : "";
@@ -245,7 +249,7 @@ export const TEMPLATES_WSP = {
   /**
    * Confirmación de pedido después de una venta.
    */
-  confirmacionPedido({ nombreCliente, items, total, miNombre = "" }) {
+  confirmacionPedido({ nombreCliente, items, total, miNombre = FIRMA_NEGOCIO }) {
     const nombre = (nombreCliente || "").split(/\s+/)[0] || "";
     const listaItems = (items || []).map(it => `• ${it.cantidad}x ${it.nombre}`).join("\n");
     const firma = miNombre ? `\n\nSaludos,\n${miNombre}` : "";
@@ -255,7 +259,7 @@ export const TEMPLATES_WSP = {
   /**
    * Aviso de que el pedido está listo para entregar.
    */
-  pedidoListo({ nombreCliente, total, saldo, miNombre = "" }) {
+  pedidoListo({ nombreCliente, total, saldo, miNombre = FIRMA_NEGOCIO }) {
     const nombre = (nombreCliente || "").split(/\s+/)[0] || "";
     const saldoInfo = saldo > 0
       ? `\n💰 Quedaría pendiente de pago: ${formatoMoneda(saldo)}`
@@ -267,7 +271,7 @@ export const TEMPLATES_WSP = {
   /**
    * Confirmación de pago recibido.
    */
-  pagoRecibido({ nombreCliente, monto, saldoRestante, miNombre = "" }) {
+  pagoRecibido({ nombreCliente, monto, saldoRestante, miNombre = FIRMA_NEGOCIO }) {
     const nombre = (nombreCliente || "").split(/\s+/)[0] || "";
     const restanteInfo = saldoRestante > 0
       ? `\n💰 Saldo pendiente: ${formatoMoneda(saldoRestante)}`
@@ -279,7 +283,7 @@ export const TEMPLATES_WSP = {
   /**
    * Mensaje libre (solo abre WhatsApp con el contacto).
    */
-  saludoLibre({ nombreCliente, miNombre = "" }) {
+  saludoLibre({ nombreCliente, miNombre = FIRMA_NEGOCIO }) {
     const nombre = (nombreCliente || "").split(/\s+/)[0] || "";
     const firma = miNombre ? `\n\nSaludos,\n${miNombre}` : "";
     return `Hola ${nombre}! 👋${firma}`;
