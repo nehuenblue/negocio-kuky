@@ -1,324 +1,316 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#f8f1e9" />
-  <title>Negocio Kuky · Destino de fondos</title>
+// =====================================================================
+// Negocio Kuky · Destino de fondos (js/pages/fondos.js)
+// =====================================================================
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+import { requireAuth } from "../auth.js";
+import { renderLayout } from "../layout.js";
+import {
+  listarMovimientosFondos, crearMovimientoFondo, eliminarMovimientoFondo,
+  balanceIntegrado, DESTINOS_FONDOS
+} from "../db.js";
+import {
+  $, $$, escapeHTML, toast, formatoMoneda, formatoFecha, fechaRelativa, RANGOS
+} from "../utils.js";
 
-  <link rel="icon" type="image/jpeg" href="assets/logo.jpg" />
-  <link rel="stylesheet" href="assets/styles.css" />
+// =====================================================================
+// Errores
+// =====================================================================
+window.addEventListener('error', (e) => {
+  console.error('[fondos] error:', e.error || e.message);
+  toast('Error: ' + (e.error?.message || e.message), 'error');
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[fondos] unhandled:', e.reason);
+  toast('Error: ' + (e.reason?.message || String(e.reason)), 'error');
+});
 
-  <style>
-    /* Balance principal */
-    .balance-grande {
-      background: linear-gradient(135deg, var(--crema-clara) 0%, var(--rose-claro) 100%);
-      border: 1px solid var(--linea);
-      border-radius: var(--radio-lg);
-      padding: 24px;
-      margin-bottom: var(--gap-md);
-      display: grid;
-      grid-template-columns: 1fr 1fr 1.4fr;
-      gap: 20px;
-      align-items: center;
-    }
-    @media (max-width: 700px) {
-      .balance-grande {
-        grid-template-columns: 1fr;
-        gap: 14px;
-      }
-    }
-    .balance-item .lbl {
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--rose-profundo);
-      margin-bottom: 4px;
-    }
-    .balance-item .val {
-      font-family: var(--font-serif);
-      font-size: 26px;
-      color: var(--tinta);
-      font-weight: 500;
-      line-height: 1.1;
-    }
-    .balance-item .val.ok { color: var(--estado-ok); }
-    .balance-item .val.warn { color: var(--estado-warn); }
-    .balance-item .val.error { color: var(--estado-error); }
-    .balance-item .pie {
-      font-size: 11px;
-      color: var(--gris-suave);
-      margin-top: 4px;
-    }
-    .balance-final {
-      text-align: right;
-      padding-left: 20px;
-      border-left: 1px solid var(--linea);
-    }
-    @media (max-width: 700px) {
-      .balance-final {
-        text-align: left;
-        padding-left: 0;
-        padding-top: 14px;
-        border-left: none;
-        border-top: 1px solid var(--linea);
-      }
-    }
-    .balance-final .val {
-      font-size: 36px;
-    }
-    .balance-final .signo {
-      font-size: 26px;
-      color: var(--gris-suave);
-    }
+// =====================================================================
+// Init
+// =====================================================================
+const usuario = await requireAuth();
+document.getElementById('pantalla-carga').style.display = 'none';
+document.getElementById('app').style.display = 'grid';
+renderLayout({ usuario, paginaActiva: "fondos" });
 
-    /* Distribución por destino */
-    .destinos-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 10px;
-      margin-bottom: var(--gap-md);
-    }
-    .destino-card {
-      background: var(--crema-clara);
-      border: 1px solid var(--linea);
-      border-radius: var(--radio-md);
-      padding: 14px;
-    }
-    .destino-card .icono-d {
-      font-size: 22px;
-      margin-bottom: 6px;
-    }
-    .destino-card .nombre-d {
-      font-size: 11px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--rose-profundo);
-    }
-    .destino-card .total-d {
-      font-family: var(--font-serif);
-      font-size: 22px;
-      color: var(--tinta);
-      font-weight: 500;
-      margin-top: 4px;
-    }
-    .destino-card .cant-d {
-      font-size: 11px;
-      color: var(--gris-suave);
-      margin-top: 2px;
-    }
+// Definir un rango extra "ultimosTresMeses" si no existe
+if (!RANGOS.ultimosTresMeses) {
+  RANGOS.ultimosTresMeses = () => {
+    const hasta = new Date();
+    const desde = new Date();
+    desde.setMonth(desde.getMonth() - 3);
+    desde.setHours(0, 0, 0, 0);
+    hasta.setHours(23, 59, 59, 999);
+    return { desde, hasta, etiqueta: "Últimos 3 meses" };
+  };
+}
 
-    /* Tabla movimientos */
-    .tabla-movs td { vertical-align: middle; padding: 12px 14px; }
-    .tabla-movs tbody tr { transition: background var(--t-rapida); }
-    .tabla-movs tbody tr:hover { background: var(--crema-oscura); }
+// =====================================================================
+// Estado
+// =====================================================================
+let movimientos = [];
+let balance = null;
+let destinoSeleccionado = null;
 
-    .destino-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 10px;
-      background: var(--crema-oscura);
-      border-radius: var(--radio-pill);
-      font-size: 12px;
-      color: var(--tinta);
-      font-weight: 500;
-    }
+// Refs
+const $tbody = $('#tbody-movs');
+const $filtroRango = $('#filtro-rango');
+const $filtroDestino = $('#filtro-destino');
+const $modalNuevo = $('#modal-nuevo');
 
-    .btn-eliminar-mov {
-      background: transparent;
-      border: 1px solid var(--linea);
-      color: var(--estado-error);
-      padding: 4px 10px;
-      border-radius: var(--radio-md);
-      cursor: pointer;
-      font-size: 11px;
-      font-family: inherit;
-      transition: all var(--t-rapida);
-    }
-    .btn-eliminar-mov:hover {
-      background: var(--estado-error);
-      color: white;
-      border-color: var(--estado-error);
-    }
+// =====================================================================
+// LLENAR SELECTORES
+// =====================================================================
+function llenarSelectorDestinos() {
+  $filtroDestino.innerHTML = '<option value="">Todos los destinos</option>' +
+    DESTINOS_FONDOS.map(d => `
+      <option value="${escapeHTML(d.id)}">${d.icono} ${escapeHTML(d.nombre)}</option>
+    `).join('');
 
-    /* Botones de destino en modal */
-    .destinos-selector {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .destino-btn {
-      padding: 12px 8px;
-      background: white;
-      border: 2px solid var(--linea);
-      border-radius: var(--radio-md);
-      cursor: pointer;
-      transition: all var(--t-rapida);
-      font-family: inherit;
-      text-align: center;
-    }
-    .destino-btn:hover {
-      border-color: var(--rose-palo);
-      background: var(--rose-claro);
-    }
-    .destino-btn.activo {
-      border-color: var(--terracota);
-      background: var(--rose-claro);
-    }
-    .destino-btn .icono-sel {
-      font-size: 20px;
-      display: block;
-      margin-bottom: 4px;
-    }
-    .destino-btn .nombre-sel {
-      font-size: 11px;
-      color: var(--tinta);
-    }
-  </style>
-</head>
+  // Selector visual del modal de nuevo
+  $('#destinos-selector').innerHTML = DESTINOS_FONDOS.map(d => `
+    <button type="button" class="destino-btn" data-id="${escapeHTML(d.id)}">
+      <span class="icono-sel">${d.icono}</span>
+      <span class="nombre-sel">${escapeHTML(d.nombre)}</span>
+    </button>
+  `).join('');
 
-<body>
+  // Wire-up click
+  $$('.destino-btn').forEach($btn => {
+    $btn.addEventListener('click', () => {
+      $$('.destino-btn').forEach(b => b.classList.remove('activo'));
+      $btn.classList.add('activo');
+      destinoSeleccionado = $btn.dataset.id;
+    });
+  });
+}
 
-  <div class="cargando-pantalla" id="pantalla-carga">
-    <div class="contenido">
-      <div class="spinner-grande"></div>
-      <div class="etiqueta">Cargando fondos</div>
+llenarSelectorDestinos();
+
+// =====================================================================
+// CARGA
+// =====================================================================
+async function recargar() {
+  $tbody.innerHTML = `<tr><td colspan="5"><div class="vacio"><p>Cargando…</p></div></td></tr>`;
+  $('#destinos-grid').innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 30px; color: var(--gris-suave); font-size: 12px;">Cargando…</div>';
+
+  try {
+    const rangoActivo = $filtroRango.value;
+    let desde = null, hasta = null;
+    if (rangoActivo !== "todo" && RANGOS[rangoActivo]) {
+      const r = RANGOS[rangoActivo]();
+      desde = r.desde;
+      hasta = r.hasta;
+    }
+    const destinoFiltro = $filtroDestino.value || null;
+
+    [movimientos, balance] = await Promise.all([
+      listarMovimientosFondos({ desde, hasta, destino: destinoFiltro }),
+      balanceIntegrado({ desde, hasta }),  // siempre sin filtro de destino, balance es general
+    ]);
+
+    renderBalance();
+    renderDestinos();
+    renderTabla();
+  } catch (e) {
+    console.error(e);
+    $tbody.innerHTML = `<tr><td colspan="5">
+      <div class="alerta alerta-error" style="margin: 20px;">
+        ${escapeHTML(e.message || 'Error cargando datos')}
+      </div>
+    </td></tr>`;
+  }
+}
+
+// =====================================================================
+// RENDERS
+// =====================================================================
+function renderBalance() {
+  if (!balance) return;
+
+  $('#bal-cobrado').textContent = formatoMoneda(balance.totalCobrado);
+  $('#bal-cobrado-pie').textContent = `${balance.cantPagos} ${balance.cantPagos === 1 ? 'pago' : 'pagos'}`;
+
+  $('#bal-gastado').textContent = formatoMoneda(balance.totalGastado);
+  $('#bal-gastado-pie').textContent = `${balance.cantMovimientos} ${balance.cantMovimientos === 1 ? 'movimiento' : 'movimientos'}`;
+
+  $('#bal-neto-monto').textContent = formatoMoneda(balance.balance);
+
+  const $valNeto = $('#bal-neto');
+  $valNeto.querySelector('.signo').textContent = balance.balance > 0 ? '+' : balance.balance < 0 ? '−' : '=';
+
+  // Colorear según signo
+  const $monto = $('#bal-neto-monto');
+  $monto.style.color = '';
+  if (balance.balance > 0) $monto.style.color = 'var(--estado-ok)';
+  else if (balance.balance < 0) $monto.style.color = 'var(--estado-error)';
+
+  $('#resumen-fondos').textContent = balance.cantMovimientos === 0
+    ? 'Empezá registrando tu primer movimiento de fondos.'
+    : `${balance.cantMovimientos} ${balance.cantMovimientos === 1 ? 'movimiento' : 'movimientos'} registrados`;
+}
+
+function renderDestinos() {
+  const $grid = $('#destinos-grid');
+  if (!balance || balance.porDestino.length === 0) {
+    $grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 30px; color: var(--gris-suave); font-size: 12px; font-style: italic;">Sin movimientos en este período.</div>';
+    return;
+  }
+
+  $grid.innerHTML = balance.porDestino.map(d => `
+    <div class="destino-card">
+      <div class="icono-d">${d.icono}</div>
+      <div class="nombre-d">${escapeHTML(d.nombre)}</div>
+      <div class="total-d">${formatoMoneda(d.total, { compacto: true })}</div>
+      <div class="cant-d">${d.cantidad} ${d.cantidad === 1 ? 'movimiento' : 'movimientos'}</div>
     </div>
-  </div>
+  `).join('');
+}
 
-  <div class="app" id="app" style="display:none;">
-    <div class="main-wrapper">
-      <main class="main">
-
-        <div class="main-header">
-          <div>
-            <h1 class="titulo-display">Destino de fondos<em>.</em></h1>
-            <p class="subtitulo mt-sm" id="resumen-fondos">Cargando…</p>
-          </div>
-          <button class="btn btn-primario" id="btn-nuevo">+ Nuevo movimiento</button>
-        </div>
-
-        <!-- Selector de período -->
-        <div class="card mb-md">
-          <div class="flex flex-gap-sm flex-wrap" style="align-items: center;">
-            <div class="etiqueta" style="margin-right: 8px;">Período</div>
-            <select class="select" id="filtro-rango" style="min-width: 180px;">
-              <option value="esteMes" selected>Este mes</option>
-              <option value="hoy">Hoy</option>
-              <option value="estaSemana">Esta semana</option>
-              <option value="ultimos30Dias">Últimos 30 días</option>
-              <option value="ultimosTresMeses">Últimos 3 meses</option>
-              <option value="todo">Todo el histórico</option>
-            </select>
-            <select class="select" id="filtro-destino" style="min-width: 180px;">
-              <option value="">Todos los destinos</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Balance integrado -->
-        <div class="balance-grande">
-          <div class="balance-item">
-            <div class="lbl">Cobrado</div>
-            <div class="val ok" id="bal-cobrado">$ 0</div>
-            <div class="pie" id="bal-cobrado-pie">— pagos</div>
-          </div>
-          <div class="balance-item">
-            <div class="lbl">Gastado / Destinado</div>
-            <div class="val warn" id="bal-gastado">$ 0</div>
-            <div class="pie" id="bal-gastado-pie">— movimientos</div>
-          </div>
-          <div class="balance-item balance-final">
-            <div class="lbl">Balance neto</div>
-            <div class="val" id="bal-neto">
-              <span class="signo">=</span> <span id="bal-neto-monto">$ 0</span>
-            </div>
-            <div class="pie" id="bal-neto-pie">cobrado − gastado</div>
-          </div>
-        </div>
-
-        <!-- Distribución por destino -->
-        <div class="etiqueta mb-sm">Distribución por destino</div>
-        <div class="destinos-grid" id="destinos-grid">
-          <div class="vacio-mini" style="grid-column: 1/-1; text-align: center; padding: 30px; color: var(--gris-suave);">
-            Cargando…
-          </div>
-        </div>
-
-        <!-- Tabla -->
-        <div class="etiqueta mb-sm">Movimientos del período</div>
-        <div class="tabla-wrapper">
-          <table class="tabla tabla-movs">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Destino</th>
-                <th class="alinear-derecha">Monto</th>
-                <th>Descripción</th>
-                <th class="alinear-derecha">Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-movs">
-              <tr><td colspan="5"><div class="vacio"><p>Cargando…</p></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-      </main>
-    </div>
-  </div>
-
-  <!-- Modal: nuevo movimiento -->
-  <div class="modal-overlay" id="modal-nuevo">
-    <div class="modal" style="max-width: 480px;">
-      <div class="flex flex-between mb-md">
-        <h2 class="titulo-card">Nuevo movimiento de fondos</h2>
-        <button class="btn-icono btn-fantasma" id="cerrar-nuevo">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+function renderTabla() {
+  if (movimientos.length === 0) {
+    $tbody.innerHTML = `<tr><td colspan="5">
+      <div class="vacio">
+        <h3>Sin movimientos</h3>
+        <p>${balance && balance.totalCobrado > 0
+          ? 'Cobraste plata pero todavía no registraste a dónde fue. Tocá "+ Nuevo movimiento" para empezar.'
+          : 'Cuando registres a dónde va tu plata, aparecerá acá.'}</p>
       </div>
+    </td></tr>`;
+    return;
+  }
 
-      <p style="font-size: 12px; color: var(--gris-suave); margin-bottom: var(--gap-md);">
-        Registrá a dónde va tu plata. Esto NO afecta los pagos de tus clientes, solo es para que sepas cómo distribuís lo que cobrás.
-      </p>
+  $tbody.innerHTML = movimientos.map(filaMovimiento).join('');
 
-      <div class="campo">
-        <label>Destino</label>
-        <div class="destinos-selector" id="destinos-selector">
-          <!-- Se renderiza con JS -->
-        </div>
-      </div>
+  // Wire-up botones de eliminar
+  $$('.btn-eliminar-mov[data-id]').forEach($btn => {
+    $btn.addEventListener('click', () => eliminarMov($btn.dataset.id));
+  });
+}
 
-      <div class="campo">
-        <label for="input-monto">Monto</label>
-        <input type="number" id="input-monto" class="input" placeholder="0" min="1" step="1" />
-      </div>
+function filaMovimiento(m) {
+  const destino = DESTINOS_FONDOS.find(d => d.id === m.destino) || { icono: '📝', nombre: m.destino || 'Otros' };
+  return `
+    <tr>
+      <td>
+        <div style="font-size: 12px; color: var(--tinta);">${escapeHTML(formatoFecha(m.fecha, { corta: true }))}</div>
+        <div style="font-size: 10px; color: var(--gris-suave);">${escapeHTML(fechaRelativa(m.fecha))}</div>
+      </td>
+      <td>
+        <span class="destino-badge">
+          <span>${destino.icono}</span>
+          <span>${escapeHTML(destino.nombre)}</span>
+        </span>
+      </td>
+      <td class="alinear-derecha" style="font-weight: 500; font-family: var(--font-serif); font-size: 16px;">
+        ${formatoMoneda(m.monto)}
+      </td>
+      <td style="font-size: 12px; color: var(--gris-suave); max-width: 300px;">
+        ${escapeHTML(m.descripcion || '—')}
+      </td>
+      <td class="alinear-derecha">
+        <button class="btn-eliminar-mov" data-id="${escapeHTML(m.id)}">Eliminar</button>
+      </td>
+    </tr>
+  `;
+}
 
-      <div class="campo">
-        <label for="input-fecha">Fecha</label>
-        <input type="date" id="input-fecha" class="input" />
-      </div>
+// =====================================================================
+// CREAR / ELIMINAR
+// =====================================================================
+function abrirModalNuevo() {
+  // Reset
+  destinoSeleccionado = null;
+  $$('.destino-btn').forEach(b => b.classList.remove('activo'));
+  $('#input-monto').value = '';
+  $('#input-fecha').value = new Date().toISOString().substring(0, 10);
+  $('#input-descripcion').value = '';
+  $('#error-nuevo').classList.add('oculto');
 
-      <div class="campo">
-        <label for="input-descripcion">Descripción (opcional)</label>
-        <input type="text" id="input-descripcion" class="input" placeholder="Ej: Pago a proveedor" maxlength="200" />
-      </div>
+  $modalNuevo.classList.add('abierto');
+  setTimeout(() => $('#input-monto').focus(), 100);
+}
 
-      <div id="error-nuevo" class="alerta alerta-error oculto mb-md"></div>
+function cerrarModalNuevo() {
+  $modalNuevo.classList.remove('abierto');
+}
 
-      <div class="flex flex-gap-sm" style="justify-content: flex-end;">
-        <button class="btn btn-fantasma" id="btn-cancelar-nuevo">Cancelar</button>
-        <button class="btn btn-primario" id="btn-guardar-nuevo">Guardar movimiento</button>
-      </div>
-    </div>
-  </div>
+$('#btn-nuevo').addEventListener('click', abrirModalNuevo);
+$('#cerrar-nuevo').addEventListener('click', cerrarModalNuevo);
+$('#btn-cancelar-nuevo').addEventListener('click', cerrarModalNuevo);
+$modalNuevo.addEventListener('click', (e) => {
+  if (e.target === $modalNuevo) cerrarModalNuevo();
+});
 
-  <script type="module" src="js/pages/fondos.js"></script>
-</body>
-</html>
+$('#btn-guardar-nuevo').addEventListener('click', async () => {
+  $('#error-nuevo').classList.add('oculto');
+
+  const monto = Number($('#input-monto').value);
+  const fechaStr = $('#input-fecha').value;
+  const descripcion = $('#input-descripcion').value;
+
+  if (!destinoSeleccionado) {
+    $('#error-nuevo').textContent = 'Tenés que elegir un destino.';
+    $('#error-nuevo').classList.remove('oculto');
+    return;
+  }
+  if (!monto || monto <= 0) {
+    $('#error-nuevo').textContent = 'Ingresá un monto válido mayor a 0.';
+    $('#error-nuevo').classList.remove('oculto');
+    return;
+  }
+
+  const $btn = $('#btn-guardar-nuevo');
+  $btn.disabled = true;
+  $btn.innerHTML = '<span class="cargando-spinner"></span> Guardando…';
+
+  try {
+    const fecha = fechaStr ? new Date(fechaStr + 'T12:00:00') : new Date();
+    await crearMovimientoFondo({
+      monto,
+      destino: destinoSeleccionado,
+      descripcion,
+      fecha,
+    });
+    toast('Movimiento registrado.', 'ok');
+    cerrarModalNuevo();
+    await recargar();
+  } catch (err) {
+    console.error(err);
+    $('#error-nuevo').textContent = err.message || 'No se pudo guardar.';
+    $('#error-nuevo').classList.remove('oculto');
+  } finally {
+    $btn.disabled = false;
+    $btn.textContent = 'Guardar movimiento';
+  }
+});
+
+async function eliminarMov(movId) {
+  const mov = movimientos.find(m => m.id === movId);
+  if (!mov) return;
+
+  if (!confirm(`¿Eliminar este movimiento de ${formatoMoneda(mov.monto)}?\n\nEsta acción no se puede deshacer.`)) return;
+
+  try {
+    await eliminarMovimientoFondo(movId);
+    toast('Movimiento eliminado.', 'ok');
+    await recargar();
+  } catch (err) {
+    console.error(err);
+    toast('No se pudo eliminar: ' + err.message, 'error');
+  }
+}
+
+// =====================================================================
+// LISTENERS
+// =====================================================================
+$filtroRango.addEventListener('change', recargar);
+$filtroDestino.addEventListener('change', recargar);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $modalNuevo.classList.contains('abierto')) cerrarModalNuevo();
+});
+
+// =====================================================================
+// CARGA INICIAL
+// =====================================================================
+await recargar();
