@@ -64,10 +64,11 @@ window.addEventListener('unhandledrejection', (e) => {
 // =====================================================================
 const usuario = await requireAuth();
 document.getElementById('pantalla-carga').style.display = 'none';
-// El CSS de mapa.html ya define .app como pantalla completa (height:100vh).
-// Usamos 'block' (no 'grid') para no romper ese layout: el mapa va a
-// pantalla completa con su panel lateral propio, sin el sidebar global.
-document.getElementById('app').style.display = 'block';
+// Mostramos #app como GRID (igual que styles.css: 264px sidebar + 1fr).
+// Antes se ponía 'block', lo que rompía el grid y dejaba el mapa sin
+// ancho correcto hasta forzar un reflow (abrir F12). Con grid, el sidebar
+// ocupa su columna y el mapa la otra, igual que el resto de las páginas.
+document.getElementById('app').style.display = 'grid';
 
 // Renderizar el layout (sidebar + topbar mobile con el menú hamburguesa),
 // igual que el resto de las páginas. En mobile esto da el botón de menú
@@ -466,12 +467,33 @@ await cargarDatos();
 // Forzar refresh final después de cargar los marcadores
 requestAnimationFrame(() => mapa?.invalidateSize(true));
 
-// Refrescos extra: el layout de escritorio (sidebar + main) a veces termina
-// de acomodarse unos ms después. Reaplicamos el tamaño para que el mapa
-// pinte los tiles en toda el área disponible.
-setTimeout(() => mapa?.invalidateSize(true), 250);
-setTimeout(() => mapa?.invalidateSize(true), 600);
+// Refrescos extra escalonados por si el layout tarda en acomodarse
+[100, 300, 600, 1000, 1500].forEach(ms => {
+  setTimeout(() => mapa?.invalidateSize(true), ms);
+});
 window.addEventListener('load', () => mapa?.invalidateSize(true));
+
+// FIX PRINCIPAL: observar el contenedor del mapa de forma permanente.
+// Si el contenedor cambia de tamaño en cualquier momento (porque el layout
+// terminó de acomodarse, se abrió/cerró el inspector, rotó la pantalla,
+// etc.), reaplicamos invalidateSize para que Leaflet repinte los tiles.
+// Esto resuelve el caso en que el mapa se crea antes de tener tamaño final.
+(() => {
+  const cont = document.getElementById('mapa-container');
+  if (!cont || typeof ResizeObserver === 'undefined') return;
+  let ultimoW = 0, ultimoH = 0;
+  const ro = new ResizeObserver(entries => {
+    for (const e of entries) {
+      const w = Math.round(e.contentRect.width);
+      const h = Math.round(e.contentRect.height);
+      if ((w !== ultimoW || h !== ultimoH) && w > 0 && h > 0) {
+        ultimoW = w; ultimoH = h;
+        mapa?.invalidateSize(true);
+      }
+    }
+  });
+  ro.observe(cont);
+})();
 
 // También al cambiar el tamaño de ventana
 window.addEventListener('resize', () => {
