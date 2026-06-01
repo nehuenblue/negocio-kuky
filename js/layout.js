@@ -1,5 +1,5 @@
 // =====================================================================
-// Emanuel Cosméticos · Componente Layout (sidebar + topbar)
+// Negocio Kuky · Componente Layout (sidebar + topbar)
 // ---------------------------------------------------------------------
 // Renderiza la estructura común a TODAS las páginas internas:
 //   - Sidebar con marca, navegación, info de usuario y logout
@@ -85,10 +85,10 @@ function generarSidebarHTML(paginaActiva, usuario) {
   return `
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-marca">
-        <img src="assets/logo.jpg" alt="Emanuel Cosméticos" />
+        <img src="assets/logo.jpg" alt="Negocio Kuky" />
         <div>
-          <div class="marca-texto">Emanuel</div>
-          <div class="marca-sub">Cosméticos</div>
+          <div class="marca-texto">Negocio</div>
+          <div class="marca-sub">Kuky</div>
         </div>
       </div>
 
@@ -160,7 +160,7 @@ export function renderLayout({ usuario, paginaActiva, titulo }) {
   // Insertar topbar mobile + overlay antes del main
   const mainWrapper = app.querySelector(".main-wrapper") || app;
   const main = mainWrapper.querySelector(".main") || document.querySelector(".main");
-  const tituloFinal = titulo || NAV.flatMap(g => g.items).find(i => i.id === paginaActiva)?.titulo || "Emanuel Cosméticos";
+  const tituloFinal = titulo || NAV.flatMap(g => g.items).find(i => i.id === paginaActiva)?.titulo || "Negocio Kuky";
   if (main) {
     main.insertAdjacentHTML("beforebegin", generarTopbarMobileHTML(tituloFinal));
   }
