@@ -64,11 +64,10 @@ window.addEventListener('unhandledrejection', (e) => {
 // =====================================================================
 const usuario = await requireAuth();
 document.getElementById('pantalla-carga').style.display = 'none';
-// Mostramos #app como GRID (igual que styles.css: 264px sidebar + 1fr).
-// Antes se ponía 'block', lo que rompía el grid y dejaba el mapa sin
-// ancho correcto hasta forzar un reflow (abrir F12). Con grid, el sidebar
-// ocupa su columna y el mapa la otra, igual que el resto de las páginas.
-document.getElementById('app').style.display = 'grid';
+// Esta página usa layout apilado (igual que mobile) en TODAS las pantallas:
+// el menú va arriba con el botón hamburguesa y el mapa abajo. Por eso #app
+// se muestra como block (el CSS de mapa.html fuerza este modo apilado).
+document.getElementById('app').style.display = 'block';
 
 // Renderizar el layout (sidebar + topbar mobile con el menú hamburguesa),
 // igual que el resto de las páginas. En mobile esto da el botón de menú
@@ -202,15 +201,19 @@ function inicializarMapa() {
   }
   mapa.addLayer(cluster);
 
-  // FIX CRÍTICO: forzar invalidate y reseteo de vista después de un frame
-  // Esto elimina el bug del scale 8x que aparece cuando el mapa se crea
-  // con dimensiones que cambian después.
+  // FIX CRÍTICO: forzar invalidate y reseteo de vista. Usamos doble
+  // requestAnimationFrame: el primer frame deja que el navegador aplique
+  // el layout (el #app acaba de pasar de display:none a grid), y el segundo
+  // garantiza que ya pintó, momento en que invalidateSize reposiciona bien
+  // los tiles. Sin esto, los tiles quedan mal ubicados hasta que un reflow
+  // externo (abrir F12, redimensionar) los corrige.
   requestAnimationFrame(() => {
-    mapa.invalidateSize(true);
-    // Re-aplicar la vista para resetear cualquier estado raro de zoom
-    mapa.setView([CENTRO_DEFAULT.lat, CENTRO_DEFAULT.lng], CENTRO_DEFAULT.zoom, {
-      animate: false,
-      reset: true,
+    requestAnimationFrame(() => {
+      mapa.invalidateSize(true);
+      mapa.setView([CENTRO_DEFAULT.lat, CENTRO_DEFAULT.lng], CENTRO_DEFAULT.zoom, {
+        animate: false,
+        reset: true,
+      });
     });
   });
 }
