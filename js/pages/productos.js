@@ -250,7 +250,6 @@ function cardProducto(p) {
           ` : `
             <div class="precio vacio">⚠ Sin precio</div>
           `}
-          ${p.puntos ? `<div style="font-size: 10px; color: var(--rose-profundo); letter-spacing: 0.08em; margin-top: 2px;">${p.puntos} PTS</div>` : ''}
         </div>
         <div class="stock ${sinStock ? 'cero' : stockBajo ? 'bajo' : ''}">
           ${typeof p.stock === 'number' ? `Stock: ${p.stock}` : ''}
@@ -548,7 +547,6 @@ async function abrirModalForm(codigo = null) {
     $('#f-categoria').value      = p.categoria || '';
     $('#f-precio').value         = p.precio || '';
     $('#f-costo').value          = p.costo || '';
-    $('#f-puntos').value         = p.puntos || '';
     $('#f-stock').value          = p.stock ?? '';
     $('#f-estado').value         = p.estado || 'activo';
     $('#f-observaciones').value  = p.observaciones || '';
@@ -606,7 +604,6 @@ $formProd.addEventListener('submit', async (e) => {
     categoria:     $('#f-categoria').value.trim(),
     precio:        $('#f-precio').value,
     costo:         $('#f-costo').value,
-    puntos:        $('#f-puntos').value,
     stock:         $('#f-stock').value,
     estado:        $('#f-estado').value,
     observaciones: $('#f-observaciones').value.trim(),
@@ -757,10 +754,200 @@ $('#btn-aplicar-masivo').addEventListener('click', async () => {
 // Cerrar con Esc
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if ($modalForm.classList.contains('abierto')) cerrarModalForm();
+    const modalCR = document.getElementById('modal-carga-rapida');
+    if (modalCR && modalCR.classList.contains('abierto')) {
+      modalCR.classList.remove('abierto');
+      if (crCargados > 0) recargar();
+    }
+    else if ($modalForm.classList.contains('abierto')) cerrarModalForm();
     else if ($modalMasivo.classList.contains('abierto')) cerrarModalMasivo();
   }
 });
+
+// =====================================================================
+// CARGA RÁPIDA (con lector de código de barras)
+// =====================================================================
+const $modalCR     = $('#modal-carga-rapida');
+const $crCodigo    = $('#cr-codigo');
+const $crNombre    = $('#cr-nombre');
+const $crPrecio    = $('#cr-precio');
+const $crCategoria = $('#cr-categoria');
+const $crStock     = $('#cr-stock');
+const $crNuevaCatWrap = $('#cr-nueva-cat-wrap');
+const $crNuevaCat  = $('#cr-nueva-cat');
+const $crError     = $('#cr-error');
+const $crAvisoCod  = $('#cr-aviso-codigo');
+const $crContador  = $('#cr-contador');
+const $crGuardar   = $('#cr-guardar');
+
+let crCargados = 0;          // contador de la sesión
+let crUltimaCategoria = "";  // recordar la última usada para comodidad
+
+// Llena el desplegable de categorías con las existentes + opción de nueva
+function crLlenarCategorias() {
+  const cats = [...new Set(productosData.map(p => p.categoria).filter(Boolean))].sort();
+  const opciones = cats.map(c => `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join('');
+  $crCategoria.innerHTML =
+    `<option value="">— Elegí categoría —</option>` +
+    opciones +
+    `<option value="__nueva__">＋ Nueva categoría…</option>`;
+  // Mantener la última categoría usada seleccionada, si todavía existe
+  if (crUltimaCategoria && cats.includes(crUltimaCategoria)) {
+    $crCategoria.value = crUltimaCategoria;
+  }
+}
+
+// Mostrar/ocultar el campo de categoría nueva
+$crCategoria.addEventListener('change', () => {
+  if ($crCategoria.value === '__nueva__') {
+    $crNuevaCatWrap.classList.remove('oculto');
+    $crNuevaCat.focus();
+  } else {
+    $crNuevaCatWrap.classList.add('oculto');
+  }
+});
+
+// Abrir carga rápida
+$('#btn-carga-rapida')?.addEventListener('click', () => {
+  crCargados = 0;
+  $crContador.textContent = '0 productos cargados en esta sesión';
+  crLlenarCategorias();
+  crLimpiarCampos(true);
+  $modalCR.classList.add('abierto');
+  setTimeout(() => $crCodigo.focus(), 100);
+});
+
+function cerrarCargaRapida() {
+  $modalCR.classList.remove('abierto');
+}
+$('#cr-cerrar')?.addEventListener('click', cerrarCargaRapida);
+$('#cr-terminar')?.addEventListener('click', cerrarCargaRapida);
+
+// Limpia los campos para el siguiente producto.
+// Si resetCategoria=false, conserva la categoría elegida (cómodo al cargar
+// muchos productos de la misma categoría seguidos).
+function crLimpiarCampos(resetCategoria = false) {
+  $crCodigo.value = '';
+  $crNombre.value = '';
+  $crPrecio.value = '';
+  $crStock.value = '';
+  $crError.classList.add('oculto');
+  $crAvisoCod.textContent = '';
+  $crCodigo.style.borderColor = '';
+  if (resetCategoria) {
+    $crCategoria.value = '';
+    $crNuevaCatWrap.classList.add('oculto');
+  }
+}
+
+// Cuando se escanea/escribe el código y se confirma (Enter del lector),
+// verifica duplicado y salta al nombre.
+$crCodigo.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const cod = $crCodigo.value.trim();
+    if (!cod) return;
+    const existente = productosData.find(p => p.id === cod);
+    if (existente) {
+      $crAvisoCod.innerHTML = `<span style="color: var(--estado-error);">⚠ Este código ya existe: "${escapeHTML(existente.nombre)}". Cambialo o escaneá otro.</span>`;
+      $crCodigo.style.borderColor = 'var(--estado-error)';
+      $crCodigo.select();
+    } else {
+      $crAvisoCod.textContent = '';
+      $crCodigo.style.borderColor = '';
+      $crNombre.focus();
+    }
+  }
+});
+
+// Enter en los demás campos avanza; en stock, guarda.
+$crNombre.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $crPrecio.focus(); } });
+$crPrecio.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $crStock.focus(); } });
+$crStock.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); crGuardarProducto(); } });
+
+// Guardar el producto actual y dejar listo para el siguiente
+$crGuardar.addEventListener('click', crGuardarProducto);
+
+async function crGuardarProducto() {
+  $crError.classList.add('oculto');
+
+  const codigo = $crCodigo.value.trim();
+  const nombre = $crNombre.value.trim();
+  const precio = Number($crPrecio.value) || 0;
+  const stock  = Number($crStock.value) || 0;
+
+  // Resolver categoría: la del select, o la nueva si se eligió esa opción
+  let categoria = $crCategoria.value;
+  if (categoria === '__nueva__') {
+    categoria = $crNuevaCat.value.trim();
+  }
+
+  // Validaciones
+  if (!codigo) {
+    crMostrarError('Falta el código. Escaneá la etiqueta.');
+    $crCodigo.focus();
+    return;
+  }
+  if (!nombre) {
+    crMostrarError('Falta el nombre del producto.');
+    $crNombre.focus();
+    return;
+  }
+  if (productosData.find(p => p.id === codigo)) {
+    crMostrarError(`El código "${codigo}" ya existe. Cambialo antes de guardar.`);
+    $crCodigo.focus();
+    $crCodigo.select();
+    return;
+  }
+  if (!categoria) categoria = 'Otros';
+
+  $crGuardar.disabled = true;
+  $crGuardar.textContent = 'Guardando…';
+
+  try {
+    await crearProducto({
+      id: codigo,
+      nombre,
+      categoria,
+      precio,
+      stock,
+      estado: 'activo',
+      ciclo: 'C01',
+    });
+
+    // Actualizar la copia local para que el chequeo de duplicados y el
+    // desplegable de categorías reflejen el nuevo producto al instante.
+    productosData.push({ id: codigo, nombre, categoria, precio, stock, estado: 'activo' });
+    crUltimaCategoria = categoria;
+    crCargados++;
+    $crContador.textContent = `${crCargados} ${crCargados === 1 ? 'producto cargado' : 'productos cargados'} en esta sesión`;
+
+    toast(`✓ "${nombre}" cargado.`, 'ok');
+
+    // Refrescar categorías (por si se agregó una nueva) y limpiar para el siguiente,
+    // conservando la categoría elegida para cargar varios seguidos.
+    crLlenarCategorias();
+    $crCategoria.value = categoria;
+    $crNuevaCatWrap.classList.add('oculto');
+    crLimpiarCampos(false);
+    $crCodigo.focus();
+  } catch (err) {
+    console.error('[carga-rapida] error guardando:', err);
+    crMostrarError('No se pudo guardar: ' + (err?.message || 'error desconocido'));
+  } finally {
+    $crGuardar.disabled = false;
+    $crGuardar.textContent = 'Guardar y siguiente';
+  }
+}
+
+function crMostrarError(msg) {
+  $crError.textContent = msg;
+  $crError.classList.remove('oculto');
+}
+
+// Al cerrar la carga rápida, refrescar el listado para ver lo cargado
+$('#cr-cerrar')?.addEventListener('click', () => { if (crCargados > 0) recargar(); });
+$('#cr-terminar')?.addEventListener('click', () => { if (crCargados > 0) recargar(); });
 
 // =====================================================================
 // SOPORTE PARA DEEP-LINK ?estado=xxx
